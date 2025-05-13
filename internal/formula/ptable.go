@@ -1,7 +1,7 @@
 package formula
 
 type Element struct {
-	Weight       float32
+	Weight       float64
 	DefaultOxide string
 }
 
@@ -126,4 +126,14 @@ var PeriodicTable PTable = PTable{
 	"Lv": Element{293, "LvO3"},
 	"Ts": Element{293, "Ts2O7"},
 	"Og": Element{294, "Og"},
+}
+
+var PeriodicTableElements []string = getKeys(PeriodicTable)
+
+func getKeys(p PTable) []string {
+	keys := make([]string, 0, len(p))
+	for k := range p {
+		keys = append(keys, k)
+	}
+	return keys
 }
