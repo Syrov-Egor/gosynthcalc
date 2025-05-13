@@ -1,20 +1,32 @@
 package formula
 
 import (
-	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
 )
 
-var atomRegex *regexp.Regexp = regexp.MustCompile(`([A-Z][a-z]*)`)
-var coefRegex *regexp.Regexp = regexp.MustCompile(`((\d+(\.\d+)?)*)`)
-var atomAndCoefRegex *regexp.Regexp = regexp.MustCompile(`([A-Z][a-z]*)((\d+(\.\d+)?)*)`)
-var openerBrackets []rune = []rune{'(', '[', '{'}
-var closerBrackets []rune = []rune{')', ']', '}'}
-var adductSymbols []rune = []rune{'*', '·', '•'}
+type ChemicalFormulaParser struct {
+	atomRegex        *regexp.Regexp
+	coefRegex        *regexp.Regexp
+	atomAndCoefRegex *regexp.Regexp
+	openerBrackets   []rune
+	closerBrackets   []rune
+	adductSymbols    []rune
+}
 
-func Parse(formula string) (map[string]float64, int) {
+func NewChemicalFormulaParser() *ChemicalFormulaParser {
+	return &ChemicalFormulaParser{
+		atomRegex:        regexp.MustCompile(`([A-Z][a-z]*)`),
+		coefRegex:        regexp.MustCompile(`((\d+(\.\d+)?)*)`),
+		atomAndCoefRegex: regexp.MustCompile(`([A-Z][a-z]*)((\d+(\.\d+)?)*)`),
+		openerBrackets:   []rune{'(', '[', '{'},
+		closerBrackets:   []rune{')', ']', '}'},
+		adductSymbols:    []rune{'*', '·', '•'},
+	}
+}
+
+func (p *ChemicalFormulaParser) parse(formula string) (map[string]float64, int) {
 	tokens := []rune{}
 	mol := make(map[string]float64)
 	i := 0
@@ -23,8 +35,8 @@ func Parse(formula string) (map[string]float64, int) {
 		token := rune(formula[i])
 		switch {
 
-		case slices.Contains(adductSymbols, token):
-			matches := coefRegex.FindStringSubmatch(formula[i+1:])
+		case slices.Contains(p.adductSymbols, token):
+			matches := p.coefRegex.FindStringSubmatch(formula[i+1:])
 			weight := 1.0
 
 			if len(matches) > 0 && matches[0] != "" {
@@ -32,13 +44,12 @@ func Parse(formula string) (map[string]float64, int) {
 				i += len(matches[0])
 			}
 
-			submol, lenght := Parse("(" + formula[i+1:] + ")" + strconv.FormatFloat(weight, 'f', -1, 64))
-			mol = fuse(mol, submol, 1.0)
-			fmt.Println("Fused on adduct:", mol)
+			submol, lenght := p.parse("(" + formula[i+1:] + ")" + strconv.FormatFloat(weight, 'f', -1, 64))
+			mol = p.fuse(mol, submol, 1.0)
 			i += lenght + 1
 
-		case slices.Contains(closerBrackets, token):
-			matches := coefRegex.FindStringSubmatch(formula[i+1:])
+		case slices.Contains(p.closerBrackets, token):
+			matches := p.coefRegex.FindStringSubmatch(formula[i+1:])
 			weight := 1.0
 
 			if len(matches) > 0 && matches[0] != "" {
@@ -47,17 +58,12 @@ func Parse(formula string) (map[string]float64, int) {
 			}
 
 			tokenStr := string(tokens)
-			submol := toMap(atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1))
-			fmt.Println("mol:", mol)
-			fmt.Println("submol:", submol)
-			fmt.Println("Weight:", weight)
-			fmt.Println("Fused on closer:", fuse(mol, submol, weight))
-			return fuse(mol, submol, weight), i
+			submol := p.toMap(p.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1))
+			return p.fuse(mol, submol, weight), i
 
-		case slices.Contains(openerBrackets, token):
-			submol, length := Parse(formula[i+1:])
-			mol = fuse(mol, submol, 1.0)
-			fmt.Println("Fused on opener:", mol)
+		case slices.Contains(p.openerBrackets, token):
+			submol, length := p.parse(formula[i+1:])
+			mol = p.fuse(mol, submol, 1.0)
 			i += length + 1
 
 		default:
@@ -66,13 +72,12 @@ func Parse(formula string) (map[string]float64, int) {
 		i++
 	}
 	tokenStr := string(tokens)
-	extractFromTokens := atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1)
-	fusedMap := fuse(mol, toMap(extractFromTokens), 1.0)
-	fmt.Println("Final fuse:", fusedMap)
+	extractFromTokens := p.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1)
+	fusedMap := p.fuse(mol, p.toMap(extractFromTokens), 1.0)
 	return fusedMap, i
 }
 
-func fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
+func (p *ChemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
 	fused := make(map[string]float64)
 	for atom, count := range mol1 {
 		fused[atom] += count * weight
@@ -83,7 +88,7 @@ func fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
 	return fused
 }
 
-func toMap(matches [][]string) map[string]float64 {
+func (p *ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 	result := make(map[string]float64)
 
 	for _, match := range matches {
