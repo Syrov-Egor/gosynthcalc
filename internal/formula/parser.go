@@ -116,9 +116,9 @@ func (p *ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 
 func (p *ChemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
 	ret := make([]Atom, len(parsed))
-	atomMatch := p.atomRegex.FindAllStringSubmatch(formula, -1)
+	atomMatch := p.atomRegex.FindAllString(formula, -1)
 	for i, match := range atomMatch {
-		ret[i] = Atom{Label: match[0], Amount: parsed[match[0]]}
+		ret[i] = Atom{Label: match, Amount: parsed[match]}
 	}
 	return ret
 }
