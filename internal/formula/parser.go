@@ -6,6 +6,11 @@ import (
 	"strconv"
 )
 
+type Atom struct {
+	Label  string
+	Amount float64
+}
+
 type ChemicalFormulaParser struct {
 	atomRegex        *regexp.Regexp
 	coefRegex        *regexp.Regexp
@@ -26,7 +31,7 @@ func NewChemicalFormulaParser() *ChemicalFormulaParser {
 	}
 }
 
-func (p *ChemicalFormulaParser) parse(formula string) (map[string]float64, int) {
+func (p *ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, int) {
 	tokens := []rune{}
 	mol := make(map[string]float64)
 	i := 0
@@ -44,7 +49,7 @@ func (p *ChemicalFormulaParser) parse(formula string) (map[string]float64, int) 
 				i += len(matches[0])
 			}
 
-			submol, lenght := p.parse("(" + formula[i+1:] + ")" + strconv.FormatFloat(weight, 'f', -1, 64))
+			submol, lenght := p.parseToMap("(" + formula[i+1:] + ")" + strconv.FormatFloat(weight, 'f', -1, 64))
 			mol = p.fuse(mol, submol, 1.0)
 			i += lenght + 1
 
@@ -62,7 +67,7 @@ func (p *ChemicalFormulaParser) parse(formula string) (map[string]float64, int) 
 			return p.fuse(mol, submol, weight), i
 
 		case slices.Contains(p.openerBrackets, token):
-			submol, length := p.parse(formula[i+1:])
+			submol, length := p.parseToMap(formula[i+1:])
 			mol = p.fuse(mol, submol, 1.0)
 			i += length + 1
 
@@ -74,6 +79,7 @@ func (p *ChemicalFormulaParser) parse(formula string) (map[string]float64, int) 
 	tokenStr := string(tokens)
 	extractFromTokens := p.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1)
 	fusedMap := p.fuse(mol, p.toMap(extractFromTokens), 1.0)
+
 	return fusedMap, i
 }
 
@@ -106,4 +112,19 @@ func (p *ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 	}
 
 	return result
+}
+
+func (p *ChemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
+	ret := make([]Atom, len(parsed))
+	atomMatch := p.atomRegex.FindAllStringSubmatch(formula, -1)
+	for i, match := range atomMatch {
+		ret[i] = Atom{Label: match[0], Amount: parsed[match[0]]}
+	}
+	return ret
+}
+
+func (p *ChemicalFormulaParser) parse(formula string) []Atom {
+	parsed, _ := p.parseToMap(formula)
+	res := p.order(formula, parsed)
+	return res
 }
