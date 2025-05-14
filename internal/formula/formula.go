@@ -1,21 +1,33 @@
 package formula
 
+import "strings"
+
 type ChemicalFormula struct {
 	formula       string
 	parsedFormula *[]Atom
 	molarMass     *float64
-	validation    *bool
 }
 
-func NewChemicalFormula(formula string) *ChemicalFormula {
-	return &ChemicalFormula{
-		formula: formula,
+func NewChemicalFormula(formula string) (*ChemicalFormula, error) {
+	validator := FormulaValidator{formula: formula}
+	err := validator.validate()
+	if err != nil {
+		return nil, err
 	}
+	newFormula := strings.Replace(formula, " ", "", -1)
+	return &ChemicalFormula{
+		formula: newFormula,
+	}, nil
+}
+
+func (c *ChemicalFormula) Formula() string {
+	return c.formula
 }
 
 func (c *ChemicalFormula) ParsedFormula() []Atom {
 	if c.parsedFormula == nil {
-		parsed := NewChemicalFormulaParser().parse(c.formula)
+		parser := ChemicalFormulaParser{}
+		parsed := parser.parse(c.formula)
 		c.parsedFormula = &parsed
 	}
 	return *c.parsedFormula
@@ -27,12 +39,4 @@ func (c *ChemicalFormula) MolarMass() float64 {
 		c.molarMass = &mass
 	}
 	return *c.molarMass
-}
-
-func (c *ChemicalFormula) Validation() bool {
-	if c.validation == nil {
-		validator := NewFormulaValidator(c.formula)
-		validator.invalidAtoms()
-	}
-	return true
 }
