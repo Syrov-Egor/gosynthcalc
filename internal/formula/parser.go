@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+
+	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
 type Regexes struct {
@@ -35,7 +37,7 @@ type Atom struct {
 
 type ChemicalFormulaParser struct{}
 
-func (p *ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, int) {
+func (p ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, int) {
 	tokens := []rune{}
 	mol := make(map[string]float64)
 	i := 0
@@ -87,7 +89,7 @@ func (p *ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, 
 	return fusedMap, i
 }
 
-func (p *ChemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
+func (p ChemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
 	fused := make(map[string]float64)
 	for atom, count := range mol1 {
 		fused[atom] += count * weight
@@ -98,7 +100,7 @@ func (p *ChemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float
 	return fused
 }
 
-func (p *ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
+func (p ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 	result := make(map[string]float64)
 
 	for _, match := range matches {
@@ -118,16 +120,17 @@ func (p *ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 	return result
 }
 
-func (p *ChemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
+func (p ChemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
 	ret := make([]Atom, len(parsed))
 	atomMatch := regexes.atomRegex.FindAllString(formula, -1)
-	for i, match := range atomMatch {
+	unique := utils.UniqueElems(atomMatch)
+	for i, match := range unique {
 		ret[i] = Atom{Label: match, Amount: parsed[match]}
 	}
 	return ret
 }
 
-func (p *ChemicalFormulaParser) parse(formula string) []Atom {
+func (p ChemicalFormulaParser) parse(formula string) []Atom {
 	parsed, _ := p.parseToMap(formula)
 	res := p.order(formula, parsed)
 	return res

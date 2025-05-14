@@ -25,8 +25,7 @@ func (v FormulaValidator) invalidAtoms() []string {
 	atoms := regexes.atomRegex.FindAllString(v.formula, -1)
 	invalid := make([]string, 0)
 	cFormula := strings.Clone(v.formula)
-	slices.Sort(atoms)
-	uniqueAtoms := slices.Compact(atoms)
+	uniqueAtoms := utils.UniqueElems(atoms)
 	sort.Slice(uniqueAtoms, func(i, j int) bool {
 		return len(uniqueAtoms[i]) > len(uniqueAtoms[j])
 	})
