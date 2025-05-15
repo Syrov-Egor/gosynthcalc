@@ -1,5 +1,9 @@
 package utils
 
+import (
+	"math"
+)
+
 func StringCounter(s string) map[string]int {
 	counts := make(map[string]int)
 	for _, char := range s {
@@ -27,4 +31,9 @@ func SumFloatS(s []float64) float64 {
 		sum += el
 	}
 	return sum
+}
+
+func RoundFloat(val float64, precision uint) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
 }
