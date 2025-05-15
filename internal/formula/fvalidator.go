@@ -68,13 +68,17 @@ func (v FormulaValidator) validate() error {
 	case v.emptyFormula():
 		err = fmt.Errorf("Empty formula string")
 	case len(v.invalidCharacters()) > 0:
-		err = fmt.Errorf("There are invalid characters in the formula: %s", v.invalidCharacters())
+		err = fmt.Errorf("There are invalid character(s) %s in the formula '%s'",
+			v.invalidCharacters(), v.formula)
 	case len(v.invalidAtoms()) > 0:
-		err = fmt.Errorf("There are invalid atoms in the formula: %s", v.invalidAtoms())
+		err = fmt.Errorf("There are invalid atom(s) %s in the formula '%s'",
+			v.invalidAtoms(), v.formula)
 	case !v.bracketsBalance():
-		err = fmt.Errorf("Brackets %s %s are not balanced", string(regexes.openerBrackets), string(regexes.closerBrackets))
+		err = fmt.Errorf("Brackets %s %s are not balanced in the formula '%s'",
+			string(regexes.openerBrackets), string(regexes.closerBrackets), v.formula)
 	case v.numOfAdducts() > 1:
-		err = fmt.Errorf("There are more than 1 adduct symbol %s", string(regexes.adductSymbols))
+		err = fmt.Errorf("There are more than 1 adduct symbol %s in the formula '%s'",
+			string(regexes.adductSymbols), v.formula)
 	}
 	return err
 }
