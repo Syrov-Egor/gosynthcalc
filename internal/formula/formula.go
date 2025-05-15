@@ -1,7 +1,6 @@
 package formula
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -63,9 +62,13 @@ func (c *ChemicalFormula) AtomicPercent() []Atom {
 	return *c.atomicPercent
 }
 
-func (c *ChemicalFormula) OxidePercent() []Atom {
+func (c *ChemicalFormula) OxidePercent(inOxides ...string) ([]Atom, error) {
 	if c.oxidePercent == nil {
-		fmt.Println(MolarMass{c.ParsedFormula()}.customOxides("SO4", "K2O2"))
+		percent, err := MolarMass{c.ParsedFormula()}.oxidePercent(inOxides...)
+		if err != nil {
+			return nil, err
+		}
+		c.oxidePercent = &percent
 	}
-	return []Atom{}
+	return *c.oxidePercent, nil
 }
