@@ -14,7 +14,7 @@ type regexes struct {
 }
 
 var reactionRegexes regexes = regexes{
-	allowedSymbols: regexp.MustCompile(`[^a-zA-Z0-9.({[)}\]*·•=<\->→⇄+ ]`),
+	allowedSymbols: regexp.MustCompile(`[^a-zA-Z0-9.({[)}\]*·•=<\->→⇄+]`),
 	reactionSeparators: []string{
 		"==",
 		"=",
