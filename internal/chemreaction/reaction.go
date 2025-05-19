@@ -68,7 +68,6 @@ func (r *ChemicalReaction) Matrix() *mat.Dense {
 	if r.matrix == nil {
 		parsed, _ := r.ParsedFormulas()
 		matrix := createReacMatrix(parsed)
-
 		r.matrix = matrix
 	}
 	return r.matrix
