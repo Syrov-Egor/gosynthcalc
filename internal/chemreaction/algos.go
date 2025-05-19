@@ -155,7 +155,7 @@ func (b *BalancingAlgos) GPInvAlgorithm() ([]float64, error) {
 	return result, nil
 }
 
-func (ba *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
+func (ba *BalancingAlgos) PPInvAlgorithm() []float64 {
 	// Extract reactant and product matrices based on SeparatorPos
 	rows, cols := ba.ReactionMatrix.Dims()
 
@@ -178,40 +178,12 @@ func (ba *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 
 	reactantRows, reactantCols := reactantMatrix.Dims()
 
-	// 1. Moore-Penrose pseudoinverse of reactant matrix
-	var mpInverse mat.Dense
-
-	// Using SVD method to compute pseudoinverse
-	var svd mat.SVD
-	ok := svd.Factorize(reactantMatrix, mat.SVDThin)
-	if !ok {
-		// Handle failed factorization
-		return []float64{}, nil
+	// 1. Calculate Moore-Penrose pseudoinverse of reactant matrix
+	mpInverse, err := computePseudoinverse(reactantMatrix)
+	if err != nil {
+		fmt.Println("Error computing pseudoinverse of reactant matrix:", err)
+		return []float64{}
 	}
-
-	// Retrieve the components of SVD
-	var u, vt mat.Dense
-	svd.UTo(&u)
-	svd.VTo(&vt)
-
-	// Get singular values
-	s := svd.Values(nil)
-
-	// Create diagonal matrix with reciprocals of singular values
-	sInv := mat.NewDense(len(s), len(s), nil)
-	for i := 0; i < len(s); i++ {
-		if s[i] > 1e-15 { // Threshold for numerical stability
-			sInv.Set(i, i, 1/s[i])
-		} else {
-			sInv.Set(i, i, 0)
-		}
-	}
-
-	// Compute pseudoinverse A^- = V * S^-1 * U^T
-	var uT, temp mat.Dense
-	uT.CloneFrom(u.T())
-	temp.Mul(sInv, &uT)
-	mpInverse.Mul(vt.T(), &temp)
 
 	// 2. Create identity matrix of size reactantRows x reactantRows
 	identity := mat.NewDense(reactantRows, reactantRows, nil)
@@ -221,59 +193,25 @@ func (ba *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 
 	// Calculate (I - A * A^-)
 	var reactantMpProduct, tempIdentity mat.Dense
-	// Note: A * A^- will be of shape (reactantRows x reactantRows)
-	reactantMpProduct.Mul(reactantMatrix, &mpInverse)
+	reactantMpProduct.Mul(reactantMatrix, mpInverse)
 	tempIdentity.Sub(identity, &reactantMpProduct)
 
 	// Calculate G = (I - A * A^-) * B
 	var gMatrix mat.Dense
 	gMatrix.Mul(&tempIdentity, productMatrix)
 
-	// 3. Calculate pseudoinverse of G
-	var gPinv mat.Dense
-
-	// Use SVD again for G's pseudoinverse
-	ok = svd.Factorize(&gMatrix, mat.SVDThin)
-	if !ok {
-		// Handle failed factorization
-		return []float64{}, nil
-	}
-
-	// Retrieve SVD components for G
-	svd.UTo(&u)
-	svd.VTo(&vt)
-	s = svd.Values(nil)
-
-	// Create diagonal matrix with reciprocals of G's singular values
-	gSInv := mat.NewDense(len(s), len(s), nil)
-	for i := 0; i < len(s); i++ {
-		if s[i] > 1e-15 { // Threshold for numerical stability
-			gSInv.Set(i, i, 1/s[i])
-		} else {
-			gSInv.Set(i, i, 0)
-		}
-	}
-
-	// Compute G's pseudoinverse
-	uT.CloneFrom(u.T())
-	temp.Mul(gSInv, &uT)
-	gPinv.Mul(vt.T(), &temp)
-
-	// Get dimensions of G matrix and G pseudoinverse for debugging
-	gRows, _ := gMatrix.Dims()
-	_, gPinvCols := gPinv.Dims()
-
-	// Debugging: Check dimensions to ensure proper multiplication
-	if gPinvCols != gRows {
-		// Dimensions don't match, adjust the matrix shape or use a different approach
-		return []float64{}, nil
+	// 3. Calculate pseudoinverse of G matrix
+	gPinv, err := computePseudoinverse(&gMatrix)
+	if err != nil {
+		fmt.Println("Error computing pseudoinverse of G matrix:", err)
+		return []float64{}
 	}
 
 	// Calculate G^- * G
 	var gPinvG mat.Dense
-	gPinvG.Mul(&gPinv, &gMatrix)
+	gPinvG.Mul(gPinv, &gMatrix)
 
-	// Get dimensions of G^- * G
+	// Get dimensions of G^- * G for creating proper identity matrix
 	gPinvGRows, gPinvGCols := gPinvG.Dims()
 
 	// Create identity matrix of same size as G^- * G
@@ -286,7 +224,7 @@ func (ba *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 	var yMultiply mat.Dense
 	yMultiply.Sub(identityGSize, &gPinvG)
 
-	// Create vector of ones with appropriate size based on yMultiply columns
+	// Create vector of ones with appropriate size
 	_, yMultiplyCols := yMultiply.Dims()
 	ones := mat.NewVecDense(yMultiplyCols, nil)
 	for i := 0; i < yMultiplyCols; i++ {
@@ -299,17 +237,17 @@ func (ba *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 
 	// 4. Calculate x part
 
-	// Calculate A^- * B (will be reactantCols x productCols)
+	// Calculate A^- * B
 	var mpProduct mat.Dense
-	mpProduct.Mul(&mpInverse, productMatrix)
+	mpProduct.Mul(mpInverse, productMatrix)
 
-	// Calculate A^- * B * y (product matrix times y vector)
+	// Calculate A^- * B * y
 	var tmpVec mat.VecDense
 	tmpVec.MulVec(&mpProduct, yVector)
 
 	// Calculate A^- * A
 	var mpA mat.Dense
-	mpA.Mul(&mpInverse, reactantMatrix)
+	mpA.Mul(mpInverse, reactantMatrix)
 
 	// Create identity matrix of size (reactantCols x reactantCols)
 	identityA := mat.NewDense(reactantCols, reactantCols, nil)
@@ -348,7 +286,55 @@ func (ba *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 		coefs[reactantCols+i] = yVector.AtVec(i)
 	}
 
-	return coefs, nil
+	return coefs
+}
+
+// computePseudoinverse calculates the Moore-Penrose pseudoinverse of a matrix
+// using SVD and SolveTo method
+func computePseudoinverse(matrix *mat.Dense) (*mat.Dense, error) {
+	rows, cols := matrix.Dims()
+
+	// Create a new SVD factorizer and decompose the matrix
+	var svd mat.SVD
+	ok := svd.Factorize(matrix, mat.SVDFull)
+	if !ok {
+		return nil, fmt.Errorf("SVD factorization failed")
+	}
+
+	// Get the singular values
+	singularValues := make([]float64, min(rows, cols))
+	svd.Values(singularValues)
+
+	// Determine numerical rank using tolerance
+	const tol = 1e-10 // Tolerance for singular values
+	rank := 0
+	for _, val := range singularValues {
+		if val > tol {
+			rank++
+		}
+	}
+
+	// Create identity matrix of size rows x rows
+	b := mat.NewDense(rows, rows, nil)
+	for i := 0; i < rows; i++ {
+		b.Set(i, i, 1.0)
+	}
+
+	// Create the pseudoinverse matrix
+	inverse := mat.NewDense(cols, rows, nil)
+
+	// Use SolveTo to compute the pseudoinverse
+	svd.SolveTo(inverse, b, rank)
+
+	return inverse, nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func matrixRank(m *mat.Dense) (int, error) {
