@@ -3,14 +3,43 @@ package chemreaction
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"slices"
 
+	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
 )
 
 type BalancingAlgos struct {
 	ReactionMatrix *mat.Dense
 	SeparatorPos   int
+	ReactantMatrix *mat.Dense
+	ProductMatrix  *mat.Dense
+}
+
+func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int) *BalancingAlgos {
+	rows, cols := reactionMatrix.Dims()
+	reactantMatrix := mat.NewDense(rows, separatorPos, nil)
+	for i := range rows {
+		for j := range separatorPos {
+			reactantMatrix.Set(i, j, reactionMatrix.At(i, j))
+		}
+	}
+
+	productCols := cols - separatorPos
+	productMatrix := mat.NewDense(rows, productCols, nil)
+	for i := range rows {
+		for j := range productCols {
+			productMatrix.Set(i, j, reactionMatrix.At(i, j+separatorPos))
+		}
+	}
+	return &BalancingAlgos{
+		ReactionMatrix: reactionMatrix,
+		SeparatorPos:   separatorPos,
+		ReactantMatrix: reactantMatrix,
+		ProductMatrix:  productMatrix,
+	}
+
 }
 
 func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
@@ -104,30 +133,10 @@ func (b *BalancingAlgos) GPInvAlgorithm() ([]float64, error) {
 		}
 	}
 
-	var svd mat.SVD
-	ok := svd.Factorize(matrix, mat.SVDFull)
-	if !ok {
-		return nil, fmt.Errorf("SVD factorization failed")
+	inverse, err := computePseudoinverse(matrix)
+	if err != nil {
+		return nil, err
 	}
-
-	const tol = 1e-100
-	singularValues := make([]float64, min(rows, cols))
-	svd.Values(singularValues)
-
-	rank := 0
-	for _, val := range singularValues {
-		if val > tol {
-			rank++
-		}
-	}
-
-	inverse := mat.NewDense(cols, rows, nil)
-	b_ := mat.NewDense(rows, rows, nil)
-	for i := range rows {
-		b_.Set(i, i, 1.0)
-	}
-
-	svd.SolveTo(inverse, b_, rank)
 
 	identityMatrix := mat.NewDense(cols, cols, nil)
 	for i := range cols {
@@ -155,181 +164,158 @@ func (b *BalancingAlgos) GPInvAlgorithm() ([]float64, error) {
 	return result, nil
 }
 
-func (ba *BalancingAlgos) PPInvAlgorithm() []float64 {
-	// Extract reactant and product matrices based on SeparatorPos
-	rows, cols := ba.ReactionMatrix.Dims()
+func (b *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
+	reactantRows, reactantCols := b.ReactantMatrix.Dims()
 
-	// Extract reactant matrix (columns 0 to SeparatorPos)
-	reactantMatrix := mat.NewDense(rows, ba.SeparatorPos, nil)
-	for i := 0; i < rows; i++ {
-		for j := 0; j < ba.SeparatorPos; j++ {
-			reactantMatrix.Set(i, j, ba.ReactionMatrix.At(i, j))
-		}
-	}
-
-	// Extract product matrix (columns SeparatorPos to end)
-	productCols := cols - ba.SeparatorPos
-	productMatrix := mat.NewDense(rows, productCols, nil)
-	for i := 0; i < rows; i++ {
-		for j := 0; j < productCols; j++ {
-			productMatrix.Set(i, j, ba.ReactionMatrix.At(i, j+ba.SeparatorPos))
-		}
-	}
-
-	reactantRows, reactantCols := reactantMatrix.Dims()
-
-	// 1. Calculate Moore-Penrose pseudoinverse of reactant matrix
-	mpInverse, err := computePseudoinverse(reactantMatrix)
+	mpInverse, err := computePseudoinverse(b.ReactantMatrix)
 	if err != nil {
-		fmt.Println("Error computing pseudoinverse of reactant matrix:", err)
-		return []float64{}
+		return nil, fmt.Errorf("Error computing pseudoinverse of reactant matrix: %s", err)
 	}
 
-	// 2. Create identity matrix of size reactantRows x reactantRows
 	identity := mat.NewDense(reactantRows, reactantRows, nil)
-	for i := 0; i < reactantRows; i++ {
+	for i := range reactantRows {
 		identity.Set(i, i, 1)
 	}
 
-	// Calculate (I - A * A^-)
 	var reactantMpProduct, tempIdentity mat.Dense
-	reactantMpProduct.Mul(reactantMatrix, mpInverse)
+	reactantMpProduct.Mul(b.ReactantMatrix, mpInverse)
 	tempIdentity.Sub(identity, &reactantMpProduct)
 
-	// Calculate G = (I - A * A^-) * B
 	var gMatrix mat.Dense
-	gMatrix.Mul(&tempIdentity, productMatrix)
+	gMatrix.Mul(&tempIdentity, b.ProductMatrix)
 
-	// 3. Calculate pseudoinverse of G matrix
 	gPinv, err := computePseudoinverse(&gMatrix)
 	if err != nil {
-		fmt.Println("Error computing pseudoinverse of G matrix:", err)
-		return []float64{}
+		return nil, fmt.Errorf("Error computing pseudoinverse of reactant matrix: %s", err)
 	}
 
-	// Calculate G^- * G
 	var gPinvG mat.Dense
 	gPinvG.Mul(gPinv, &gMatrix)
 
-	// Get dimensions of G^- * G for creating proper identity matrix
 	gPinvGRows, gPinvGCols := gPinvG.Dims()
 
-	// Create identity matrix of same size as G^- * G
 	identityGSize := mat.NewDense(gPinvGRows, gPinvGCols, nil)
-	for i := 0; i < gPinvGRows; i++ {
+	for i := range gPinvGRows {
 		identityGSize.Set(i, i, 1)
 	}
 
-	// Calculate (I - G^- * G)
 	var yMultiply mat.Dense
 	yMultiply.Sub(identityGSize, &gPinvG)
 
-	// Create vector of ones with appropriate size
 	_, yMultiplyCols := yMultiply.Dims()
 	ones := mat.NewVecDense(yMultiplyCols, nil)
-	for i := 0; i < yMultiplyCols; i++ {
+	for i := range yMultiplyCols {
 		ones.SetVec(i, 1)
 	}
 
-	// Calculate y = (I - G^- * G) * ones
 	yVector := mat.NewVecDense(yMultiplyCols, nil)
 	yVector.MulVec(&yMultiply, ones)
 
-	// 4. Calculate x part
-
-	// Calculate A^- * B
 	var mpProduct mat.Dense
-	mpProduct.Mul(mpInverse, productMatrix)
+	mpProduct.Mul(mpInverse, b.ProductMatrix)
 
-	// Calculate A^- * B * y
 	var tmpVec mat.VecDense
 	tmpVec.MulVec(&mpProduct, yVector)
 
-	// Calculate A^- * A
 	var mpA mat.Dense
-	mpA.Mul(mpInverse, reactantMatrix)
+	mpA.Mul(mpInverse, b.ReactantMatrix)
 
-	// Create identity matrix of size (reactantCols x reactantCols)
 	identityA := mat.NewDense(reactantCols, reactantCols, nil)
-	for i := 0; i < reactantCols; i++ {
+	for i := range reactantCols {
 		identityA.Set(i, i, 1)
 	}
 
-	// Calculate (I - A^- * A)
 	var iMinusMPA mat.Dense
 	iMinusMPA.Sub(identityA, &mpA)
 
-	// Create vector of ones with size reactantCols
 	vOnes := mat.NewVecDense(reactantCols, nil)
-	for i := 0; i < reactantCols; i++ {
+	for i := range reactantCols {
 		vOnes.SetVec(i, 1)
 	}
 
-	// Calculate (I - A^- * A) * v
 	var tmpVec2 mat.VecDense
 	tmpVec2.MulVec(&iMinusMPA, vOnes)
 
-	// Calculate x = A^-By + (I-A^-A)v
 	xVector := mat.NewVecDense(reactantCols, nil)
 	xVector.AddVec(&tmpVec, &tmpVec2)
 
-	// Combine x_vector and y_vector into coefficients
 	coefs := make([]float64, reactantCols+yMultiplyCols)
 
-	// Copy values from xVector
-	for i := 0; i < reactantCols; i++ {
+	for i := range reactantCols {
 		coefs[i] = xVector.AtVec(i)
 	}
 
-	// Copy values from yVector
-	for i := 0; i < yMultiplyCols; i++ {
+	for i := range yMultiplyCols {
 		coefs[reactantCols+i] = yVector.AtVec(i)
 	}
 
-	return coefs
+	return coefs, nil
 }
 
-// computePseudoinverse calculates the Moore-Penrose pseudoinverse of a matrix
-// using SVD and SolveTo method
-func computePseudoinverse(matrix *mat.Dense) (*mat.Dense, error) {
-	rows, cols := matrix.Dims()
+func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
+	iMaxCoef := int(maxCoef)
+	_, cols := b.ReactionMatrix.Dims()
+	gen := NewMultiCombinationGenerator(iMaxCoef, cols)
+	arrs := gen.Generate(runtime.GOMAXPROCS(0))
 
-	// Create a new SVD factorizer and decompose the matrix
-	var svd mat.SVD
-	ok := svd.Factorize(matrix, mat.SVDFull)
-	if !ok {
-		return nil, fmt.Errorf("SVD factorization failed")
-	}
+	for arr := range arrs {
+		reactantCoefs := arr[:b.SeparatorPos]
+		fReactCoefs := make([]float64, len(reactantCoefs))
+		for i, val := range reactantCoefs {
+			fReactCoefs[i] = float64(val)
+		}
+		reacSum := mulAndSumMat(b.ReactantMatrix, fReactCoefs)
 
-	// Get the singular values
-	singularValues := make([]float64, min(rows, cols))
-	svd.Values(singularValues)
+		productCoefs := arr[b.SeparatorPos:]
+		fProdCoefs := make([]float64, len(productCoefs))
+		for i, val := range productCoefs {
+			fProdCoefs[i] = float64(val)
+		}
+		prodSum := mulAndSumMat(b.ProductMatrix, fProdCoefs)
 
-	// Determine numerical rank using tolerance
-	const tol = 1e-10 // Tolerance for singular values
-	rank := 0
-	for _, val := range singularValues {
-		if val > tol {
-			rank++
+		if floats.EqualApprox(reacSum, prodSum, 1e-10) {
+			ret := append(reactantCoefs, productCoefs...)
+			return ret
 		}
 	}
 
-	// Create identity matrix of size rows x rows
+	return nil
+}
+
+func mulAndSumMat(matrix *mat.Dense, vector []float64) []float64 {
+	rows, cols := matrix.Dims()
+	res := make([]float64, rows)
+	for row := range rows {
+		var sum float64
+		for el := range cols {
+			sum += matrix.At(row, el) * vector[el]
+		}
+		res[row] = sum
+	}
+	return res
+}
+
+func computePseudoinverse(matrix *mat.Dense) (*mat.Dense, error) {
+	rows, cols := matrix.Dims()
+
+	rank, err := matrixRank(matrix)
+	if err != nil {
+		return nil, err
+	}
+
 	b := mat.NewDense(rows, rows, nil)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		b.Set(i, i, 1.0)
 	}
 
-	// Create the pseudoinverse matrix
 	inverse := mat.NewDense(cols, rows, nil)
+	var svd mat.SVD
 
-	// Use SolveTo to compute the pseudoinverse
 	svd.SolveTo(inverse, b, rank)
 
 	return inverse, nil
 }
 
-// min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -340,14 +326,14 @@ func min(a, b int) int {
 func matrixRank(m *mat.Dense) (int, error) {
 	rows, cols := m.Dims()
 	var svd mat.SVD
-	ok := svd.Factorize(m, mat.SVDThin)
+	ok := svd.Factorize(m, mat.SVDFull)
 	if !ok {
 		return -1, fmt.Errorf("SVD factorization failed")
 	}
 	singularValues := make([]float64, min(rows, cols))
 	svd.Values(singularValues)
 	rank := 0
-	tol := 1e-100
+	tol := 1e-12
 	for _, val := range singularValues {
 		if val > tol {
 			rank++
