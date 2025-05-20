@@ -5,6 +5,8 @@ import (
 	"math"
 	"runtime"
 	"slices"
+	"sync"
+	"sync/atomic"
 
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
@@ -15,6 +17,10 @@ type BalancingAlgos struct {
 	SeparatorPos   int
 	ReactantMatrix *mat.Dense
 	ProductMatrix  *mat.Dense
+	ReactantRows   int
+	ProductRows    int
+	ReactantCols   int
+	ProductCols    int
 }
 
 func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int) *BalancingAlgos {
@@ -33,13 +39,17 @@ func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int) *BalancingAl
 			productMatrix.Set(i, j, reactionMatrix.At(i, j+separatorPos))
 		}
 	}
+
 	return &BalancingAlgos{
 		ReactionMatrix: reactionMatrix,
 		SeparatorPos:   separatorPos,
 		ReactantMatrix: reactantMatrix,
 		ProductMatrix:  productMatrix,
+		ReactantRows:   rows,
+		ProductRows:    rows,
+		ReactantCols:   separatorPos,
+		ProductCols:    productCols,
 	}
-
 }
 
 func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
@@ -66,7 +76,7 @@ func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
 		reactionMatrix = mat.DenseCopyOf(v.T())
 	}
 
-	rank, err := matrixRank(reactionMatrix)
+	rank, _, err := matrixRank(reactionMatrix)
 	if err != nil {
 		return nil, err
 	}
@@ -255,50 +265,86 @@ func (b *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
 	iMaxCoef := int(maxCoef)
 	_, cols := b.ReactionMatrix.Dims()
+	numWorkers := runtime.GOMAXPROCS(0)
 	gen := NewMultiCombinationGenerator(iMaxCoef, cols)
-	arrs := gen.Generate(runtime.GOMAXPROCS(0))
+	combinations := gen.Generate(numWorkers)
 
-	for arr := range arrs {
-		reactantCoefs := arr[:b.SeparatorPos]
-		fReactCoefs := make([]float64, len(reactantCoefs))
-		for i, val := range reactantCoefs {
-			fReactCoefs[i] = float64(val)
-		}
-		reacSum := mulAndSumMat(b.ReactantMatrix, fReactCoefs)
+	resultChan := make(chan []int, 1)
+	var activeWorkers int32
+	var wg sync.WaitGroup
 
-		productCoefs := arr[b.SeparatorPos:]
-		fProdCoefs := make([]float64, len(productCoefs))
-		for i, val := range productCoefs {
-			fProdCoefs[i] = float64(val)
-		}
-		prodSum := mulAndSumMat(b.ProductMatrix, fProdCoefs)
+	for range numWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			reacSum := make([]float64, b.ReactantRows)
+			prodSum := make([]float64, b.ProductRows)
 
-		if floats.EqualApprox(reacSum, prodSum, 1e-10) {
-			ret := append(reactantCoefs, productCoefs...)
-			return ret
-		}
+			for arr := range combinations {
+				select {
+				case result := <-resultChan:
+					resultChan <- result
+					return
+				default:
+				}
+
+				atomic.AddInt32(&activeWorkers, 1)
+
+				reactantCoefs := arr[:b.SeparatorPos]
+				productCoefs := arr[b.SeparatorPos:]
+				fReactCoefs := make([]float64, len(reactantCoefs))
+				for i, val := range reactantCoefs {
+					fReactCoefs[i] = float64(val)
+				}
+				fProdCoefs := make([]float64, len(productCoefs))
+				for i, val := range productCoefs {
+					fProdCoefs[i] = float64(val)
+				}
+
+				mulAndSum(b.ReactantMatrix, fReactCoefs, reacSum)
+				mulAndSum(b.ProductMatrix, fProdCoefs, prodSum)
+
+				if floats.EqualApprox(reacSum, prodSum, 1e-10) {
+					solution := slices.Concat(reactantCoefs, productCoefs)
+					select {
+					case resultChan <- solution:
+					default:
+					}
+				}
+				atomic.AddInt32(&activeWorkers, -1)
+			}
+		}()
 	}
-
-	return nil
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+	result, ok := <-resultChan
+	if !ok {
+		return nil
+	}
+	fmt.Println()
+	return result
 }
 
-func mulAndSumMat(matrix *mat.Dense, vector []float64) []float64 {
+func mulAndSum(matrix *mat.Dense, vector []float64, result []float64) {
 	rows, cols := matrix.Dims()
-	res := make([]float64, rows)
-	for row := range rows {
-		var sum float64
-		for el := range cols {
-			sum += matrix.At(row, el) * vector[el]
-		}
-		res[row] = sum
+
+	for i := range rows {
+		result[i] = 0
 	}
-	return res
+
+	for row := range rows {
+		for col := range cols {
+			result[row] += matrix.At(row, col) * vector[col]
+		}
+	}
 }
 
 func computePseudoinverse(matrix *mat.Dense) (*mat.Dense, error) {
 	rows, cols := matrix.Dims()
 
-	rank, err := matrixRank(matrix)
+	rank, svd, err := matrixRank(matrix)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +355,6 @@ func computePseudoinverse(matrix *mat.Dense) (*mat.Dense, error) {
 	}
 
 	inverse := mat.NewDense(cols, rows, nil)
-	var svd mat.SVD
 
 	svd.SolveTo(inverse, b, rank)
 
@@ -323,12 +368,12 @@ func min(a, b int) int {
 	return b
 }
 
-func matrixRank(m *mat.Dense) (int, error) {
+func matrixRank(m *mat.Dense) (int, mat.SVD, error) {
 	rows, cols := m.Dims()
 	var svd mat.SVD
 	ok := svd.Factorize(m, mat.SVDFull)
 	if !ok {
-		return -1, fmt.Errorf("SVD factorization failed")
+		return -1, svd, fmt.Errorf("SVD factorization failed")
 	}
 	singularValues := make([]float64, min(rows, cols))
 	svd.Values(singularValues)
@@ -340,7 +385,7 @@ func matrixRank(m *mat.Dense) (int, error) {
 		}
 	}
 
-	return rank, nil
+	return rank, svd, nil
 }
 
 func findNonZeroRows(m *mat.Dense) []int {
