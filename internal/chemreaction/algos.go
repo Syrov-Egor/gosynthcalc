@@ -21,9 +21,10 @@ type BalancingAlgos struct {
 	ProductRows    int
 	ReactantCols   int
 	ProductCols    int
+	Tolerance      float64
 }
 
-func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int) *BalancingAlgos {
+func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ...float64) *BalancingAlgos {
 	rows, cols := reactionMatrix.Dims()
 	reactantMatrix := mat.NewDense(rows, separatorPos, nil)
 	for i := range rows {
@@ -40,6 +41,13 @@ func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int) *BalancingAl
 		}
 	}
 
+	var tol float64
+	if tolerance == nil {
+		tol = 1e-12
+	} else {
+		tol = tolerance[0]
+	}
+
 	return &BalancingAlgos{
 		ReactionMatrix: reactionMatrix,
 		SeparatorPos:   separatorPos,
@@ -49,6 +57,7 @@ func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int) *BalancingAl
 		ProductRows:    rows,
 		ReactantCols:   separatorPos,
 		ProductCols:    productCols,
+		Tolerance:      tol,
 	}
 }
 
@@ -76,7 +85,7 @@ func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
 		reactionMatrix = mat.DenseCopyOf(v.T())
 	}
 
-	rank, _, err := matrixRank(reactionMatrix)
+	rank, _, err := matrixRank(reactionMatrix, b.Tolerance)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +100,7 @@ func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
 	augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
 	augumentedMatrix.Slice(rows, rows+nullity, 0, cols).(*mat.Dense).Copy(augument)
 
-	nonZeroRows := findNonZeroRows(augumentedMatrix)
+	nonZeroRows := findNonZeroRows(augumentedMatrix, b.Tolerance)
 	if len(nonZeroRows) < rows+nullity {
 		cleanMatrix := mat.NewDense(len(nonZeroRows), cols, nil)
 		for i, rowIdx := range nonZeroRows {
@@ -117,7 +126,7 @@ func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
 	var nonZeroVector []float64
 	for _, val := range vector {
 		absVal := math.Abs(val)
-		if absVal > 1e-10 {
+		if absVal > b.Tolerance {
 			nonZeroVector = append(nonZeroVector, absVal)
 		}
 	}
@@ -143,7 +152,7 @@ func (b *BalancingAlgos) GPInvAlgorithm() ([]float64, error) {
 		}
 	}
 
-	inverse, err := computePseudoinverse(matrix)
+	inverse, err := computePseudoinverse(matrix, b.Tolerance)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +186,7 @@ func (b *BalancingAlgos) GPInvAlgorithm() ([]float64, error) {
 func (b *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 	reactantRows, reactantCols := b.ReactantMatrix.Dims()
 
-	mpInverse, err := computePseudoinverse(b.ReactantMatrix)
+	mpInverse, err := computePseudoinverse(b.ReactantMatrix, b.Tolerance)
 	if err != nil {
 		return nil, fmt.Errorf("Error computing pseudoinverse of reactant matrix: %s", err)
 	}
@@ -194,7 +203,7 @@ func (b *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 	var gMatrix mat.Dense
 	gMatrix.Mul(&tempIdentity, b.ProductMatrix)
 
-	gPinv, err := computePseudoinverse(&gMatrix)
+	gPinv, err := computePseudoinverse(&gMatrix, b.Tolerance)
 	if err != nil {
 		return nil, fmt.Errorf("Error computing pseudoinverse of reactant matrix: %s", err)
 	}
@@ -304,7 +313,7 @@ func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
 				mulAndSum(b.ReactantMatrix, fReactCoefs, reacSum)
 				mulAndSum(b.ProductMatrix, fProdCoefs, prodSum)
 
-				if floats.EqualApprox(reacSum, prodSum, 1e-10) {
+				if floats.EqualApprox(reacSum, prodSum, b.Tolerance) {
 					solution := slices.Concat(reactantCoefs, productCoefs)
 					select {
 					case resultChan <- solution:
@@ -341,10 +350,10 @@ func mulAndSum(matrix *mat.Dense, vector []float64, result []float64) {
 	}
 }
 
-func computePseudoinverse(matrix *mat.Dense) (*mat.Dense, error) {
+func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
 	rows, cols := matrix.Dims()
 
-	rank, svd, err := matrixRank(matrix)
+	rank, svd, err := matrixRank(matrix, tol)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +377,7 @@ func min(a, b int) int {
 	return b
 }
 
-func matrixRank(m *mat.Dense) (int, mat.SVD, error) {
+func matrixRank(m *mat.Dense, tol float64) (int, mat.SVD, error) {
 	rows, cols := m.Dims()
 	var svd mat.SVD
 	ok := svd.Factorize(m, mat.SVDFull)
@@ -378,7 +387,6 @@ func matrixRank(m *mat.Dense) (int, mat.SVD, error) {
 	singularValues := make([]float64, min(rows, cols))
 	svd.Values(singularValues)
 	rank := 0
-	tol := 1e-12
 	for _, val := range singularValues {
 		if val > tol {
 			rank++
@@ -388,14 +396,14 @@ func matrixRank(m *mat.Dense) (int, mat.SVD, error) {
 	return rank, svd, nil
 }
 
-func findNonZeroRows(m *mat.Dense) []int {
+func findNonZeroRows(m *mat.Dense, tol float64) []int {
 	rows, cols := m.Dims()
 	nonZeroRows := []int{}
 
 	for i := range rows {
 		isZeroRow := true
 		for j := range cols {
-			if math.Abs(m.At(i, j)) > 1e-10 {
+			if math.Abs(m.At(i, j)) > tol {
 				isZeroRow = false
 				break
 			}
