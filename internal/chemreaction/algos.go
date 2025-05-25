@@ -271,7 +271,7 @@ func (b *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 	return coefs, nil
 }
 
-func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
+func (b *BalancingAlgos) Combinatorial(maxCoef uint) []float64 {
 	iMaxCoef := int(maxCoef)
 	_, cols := b.ReactionMatrix.Dims()
 	numWorkers := runtime.GOMAXPROCS(0)
@@ -325,7 +325,11 @@ func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
 		return nil
 	}
 	fmt.Println()
-	return result
+	toFloat := make([]float64, len(result))
+	for i, r := range result {
+		toFloat[i] = float64(r)
+	}
+	return toFloat
 }
 
 func mulAndSum(matrix *mat.Dense, vector []int, result []float64, rows int, cols int) {

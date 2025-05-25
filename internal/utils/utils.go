@@ -39,6 +39,14 @@ func RoundFloat(val float64, precision uint) float64 {
 	return math.Round(val*ratio) / ratio
 }
 
+func RoundFloatS(s []float64, precision uint) []float64 {
+	res := make([]float64, len(s))
+	for i, val := range s {
+		res[i] = RoundFloat(val, precision)
+	}
+	return res
+}
+
 type Rational struct {
 	Num, Den *big.Int
 }
@@ -55,6 +63,70 @@ func NewRational(f float64) *Rational {
 		Num: new(big.Int).Set(rat.Num()),
 		Den: new(big.Int).Set(rat.Denom()),
 	}
+}
+
+func NewRationalWithLimit(f float64, maxDenominator int64) *Rational {
+	if math.IsInf(f, 0) || math.IsNaN(f) {
+		return &Rational{big.NewInt(0), big.NewInt(1)}
+	}
+
+	if maxDenominator <= 0 {
+		maxDenominator = 1000000
+	}
+
+	return limitDenominator(f, maxDenominator)
+}
+
+func limitDenominator(x float64, maxDen int64) *Rational {
+	if x == 0 {
+		return &Rational{big.NewInt(0), big.NewInt(1)}
+	}
+
+	sign := int64(1)
+	if x < 0 {
+		sign = -1
+		x = -x
+	}
+
+	if x == math.Floor(x) {
+		return &Rational{big.NewInt(sign * int64(x)), big.NewInt(1)}
+	}
+
+	var p0, q0, p1, q1 int64 = 0, 1, 1, 0
+
+	n := x
+	for q1 <= maxDen {
+		a := int64(math.Floor(n))
+
+		p0, q0, p1, q1 = p1, q1, p1*a+p0, q1*a+q0
+
+		if q1 > maxDen {
+			break
+		}
+
+		if math.Abs(float64(p1)/float64(q1)-x) < 1e-15 {
+			break
+		}
+
+		if n == float64(a) {
+			break
+		}
+		n = 1.0 / (n - float64(a))
+
+		if math.IsInf(n, 0) || math.IsNaN(n) {
+			break
+		}
+	}
+
+	if q1 > maxDen {
+		p1, q1 = p0, q0
+	}
+
+	if q1 == 0 {
+		q1 = 1
+	}
+
+	return &Rational{big.NewInt(sign * p1), big.NewInt(q1)}
 }
 
 func (r *Rational) Simplify() {

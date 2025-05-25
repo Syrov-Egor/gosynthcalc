@@ -38,11 +38,12 @@ type rnCoef struct {
 }
 
 type reactionDecomposer struct {
-	separator string
-	initCoefs []float64
-	compounds []string
-	reactants []string
-	products  []string
+	separator    string
+	separatorPos int
+	initCoefs    []float64
+	compounds    []string
+	reactants    []string
+	products     []string
 }
 
 func NewReactionDecomposer(reaction string) (*reactionDecomposer, error) {
@@ -64,12 +65,15 @@ func NewReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 		compounds[i] = comp.formula
 	}
 
+	separatorPos := len(initReactants)
+
 	return &reactionDecomposer{
-		separator: separator,
-		initCoefs: initCoefs,
-		compounds: compounds,
-		reactants: compounds[:len(initReactants)],
-		products:  compounds[len(initReactants):],
+		separator:    separator,
+		separatorPos: separatorPos,
+		initCoefs:    initCoefs,
+		compounds:    compounds,
+		reactants:    compounds[:separatorPos],
+		products:     compounds[separatorPos:],
 	}, nil
 }
 

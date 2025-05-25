@@ -13,6 +13,7 @@ type ChemicalReaction struct {
 	chemFormulas   *[]chemformula.ChemicalFormula
 	parsedFormulas *[][]chemformula.Atom
 	matrix         *mat.Dense
+	balancer       *Balancer
 }
 
 type ReacOptions struct {
@@ -71,4 +72,12 @@ func (r *ChemicalReaction) Matrix() *mat.Dense {
 		r.matrix = matrix
 	}
 	return r.matrix
+}
+
+func (r *ChemicalReaction) Balancer() *Balancer {
+	if r.balancer == nil {
+		bal := NewBalancer(r.Matrix(), r.decomposer.separatorPos, true, 8)
+		r.balancer = bal
+	}
+	return r.balancer
 }
