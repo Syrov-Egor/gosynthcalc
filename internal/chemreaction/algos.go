@@ -301,17 +301,9 @@ func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
 
 				reactantCoefs := arr[:b.SeparatorPos]
 				productCoefs := arr[b.SeparatorPos:]
-				fReactCoefs := make([]float64, len(reactantCoefs))
-				for i, val := range reactantCoefs {
-					fReactCoefs[i] = float64(val)
-				}
-				fProdCoefs := make([]float64, len(productCoefs))
-				for i, val := range productCoefs {
-					fProdCoefs[i] = float64(val)
-				}
 
-				mulAndSum(b.ReactantMatrix, fReactCoefs, reacSum)
-				mulAndSum(b.ProductMatrix, fProdCoefs, prodSum)
+				mulAndSum(b.ReactantMatrix, reactantCoefs, reacSum, b.ReactantRows, b.ReactantCols)
+				mulAndSum(b.ProductMatrix, productCoefs, prodSum, b.ProductRows, b.ProductCols)
 
 				if floats.EqualApprox(reacSum, prodSum, b.Tolerance) {
 					solution := slices.Concat(reactantCoefs, productCoefs)
@@ -336,16 +328,11 @@ func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
 	return result
 }
 
-func mulAndSum(matrix *mat.Dense, vector []float64, result []float64) {
-	rows, cols := matrix.Dims()
-
-	for i := range rows {
-		result[i] = 0
-	}
-
+func mulAndSum(matrix *mat.Dense, vector []int, result []float64, rows int, cols int) {
 	for row := range rows {
+		result[row] = 0
 		for col := range cols {
-			result[row] += matrix.At(row, col) * vector[col]
+			result[row] += matrix.At(row, col) * float64(vector[col])
 		}
 	}
 }
