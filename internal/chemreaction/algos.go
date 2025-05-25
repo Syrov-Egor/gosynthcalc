@@ -306,7 +306,7 @@ func (b *BalancingAlgos) Combinatorial(maxCoef uint) []int {
 				mulAndSum(b.ProductMatrix, productCoefs, prodSum, b.ProductRows, b.ProductCols)
 
 				if floats.EqualApprox(reacSum, prodSum, b.Tolerance) {
-					solution := slices.Concat(reactantCoefs, productCoefs)
+					solution := arr
 					select {
 					case resultChan <- solution:
 					default:
@@ -357,13 +357,6 @@ func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
 	return inverse, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func matrixRank(m *mat.Dense, tol float64) (int, mat.SVD, error) {
 	rows, cols := m.Dims()
 	var svd mat.SVD
@@ -401,4 +394,11 @@ func findNonZeroRows(m *mat.Dense, tol float64) []int {
 	}
 
 	return nonZeroRows
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
