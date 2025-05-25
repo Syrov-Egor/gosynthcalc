@@ -9,6 +9,7 @@ import (
 
 type ChemicalReaction struct {
 	reaction       string
+	reacOpts       *ReacOptions
 	decomposer     *reactionDecomposer
 	chemFormulas   *[]chemformula.ChemicalFormula
 	parsedFormulas *[][]chemformula.Atom
@@ -16,7 +17,21 @@ type ChemicalReaction struct {
 	balancer       *Balancer
 }
 
+type Mode int
+
+const (
+	force Mode = iota
+	check
+	balance
+)
+
 type ReacOptions struct {
+	mode       Mode
+	target     int
+	targerMass float64
+	intify     bool
+	precision  uint
+	tolerance  float64
 }
 
 func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReaction, error) {
@@ -27,9 +42,24 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReac
 		return nil, err
 	}
 
+	var reacOpt ReacOptions
+	if options == nil {
+		reacOpt = ReacOptions{
+			mode:       balance,
+			target:     0,
+			targerMass: 1.0,
+			intify:     true,
+			precision:  8,
+			tolerance:  1e-8,
+		}
+	} else {
+		reacOpt = options[0]
+	}
+
 	return &ChemicalReaction{
 		reaction:   newReaction,
 		decomposer: decomp,
+		reacOpts:   &reacOpt,
 	}, nil
 }
 
@@ -76,7 +106,7 @@ func (r *ChemicalReaction) Matrix() *mat.Dense {
 
 func (r *ChemicalReaction) Balancer() *Balancer {
 	if r.balancer == nil {
-		bal := NewBalancer(r.Matrix(), r.decomposer.separatorPos, true, 8)
+		bal := NewBalancer(r.Matrix(), r.decomposer.separatorPos, r.reacOpts.intify, r.reacOpts.precision)
 		r.balancer = bal
 	}
 	return r.balancer
