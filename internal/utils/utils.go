@@ -181,3 +181,28 @@ func FindGCDSlice(nums []*big.Int) *big.Int {
 	}
 	return result
 }
+
+func SymmetricDifference(slice1, slice2 []string) []string {
+	set1 := make(map[string]bool)
+	set2 := make(map[string]bool)
+	for _, v := range slice1 {
+		set1[v] = true
+	}
+	for _, v := range slice2 {
+		set2[v] = true
+	}
+
+	var result []string
+	for _, v := range slice1 {
+		if !set2[v] {
+			result = append(result, v)
+		}
+	}
+	for _, v := range slice2 {
+		if !set1[v] {
+			result = append(result, v)
+		}
+	}
+
+	return result
+}
