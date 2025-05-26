@@ -2,6 +2,7 @@ package chemreaction
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Syrov-Egor/gosynthcalc/internal/chemformula"
@@ -22,6 +23,9 @@ type ChemicalReaction struct {
 	balancer       *Balancer
 	coefs          *MethodResult
 	normCoefs      *[]float64
+	finalReac      *string
+	finalReacNorm  *string
+	masses         *[]float64
 }
 
 type Mode int
@@ -207,7 +211,7 @@ func (r *ChemicalReaction) NormCoefficients() ([]float64, error) {
 	return *r.normCoefs, nil
 }
 
-func (r *ChemicalReaction) isBalanced() bool {
+func (r *ChemicalReaction) IsBalanced() bool {
 	coefs, _ := r.Coefficients()
 	bal, _ := r.Balancer()
 	return isReactionBalanced(
@@ -216,4 +220,77 @@ func (r *ChemicalReaction) isBalanced() bool {
 		coefs.Result,
 		r.reacOpts.tolerance,
 	)
+}
+
+func (r *ChemicalReaction) generateFinalReaction(coefs []float64) string {
+	final := []string{}
+	for i, compound := range r.decomposer.compounds {
+		if coefs[i] != 1.0 {
+			final = append(final, strconv.FormatFloat(
+				coefs[i],
+				'f',
+				-1,
+				64))
+		}
+		final = append(final, compound)
+		final = append(final, "+")
+	}
+	joined := strings.Join(final[:len(final)-1], "")
+	replaced := utils.ReplaceNthOccurrence(
+		joined,
+		reactionRegexes.reactantSeparator,
+		r.decomposer.separator,
+		r.decomposer.separatorPos,
+	)
+
+	return replaced
+}
+
+func (r *ChemicalReaction) FinalReaction() (string, error) {
+	if r.finalReac == nil {
+		coefs, err := r.Coefficients()
+		if err != nil {
+			return "", err
+		}
+		fin := r.generateFinalReaction(coefs.Result)
+		r.finalReac = &fin
+	}
+	return *r.finalReac, nil
+}
+
+func (r *ChemicalReaction) FinalReactionNorm() (string, error) {
+	if r.finalReacNorm == nil {
+		coefs, err := r.NormCoefficients()
+		if err != nil {
+			return "", err
+		}
+		fin := r.generateFinalReaction(coefs)
+		r.finalReacNorm = &fin
+	}
+	return *r.finalReacNorm, nil
+}
+
+func (r *ChemicalReaction) Masses() ([]float64, error) {
+	if r.masses == nil {
+		molars, err := r.MolarMasses()
+		if err != nil {
+			return nil, err
+		}
+		target, err := r.calculatedTarget()
+		if err != nil {
+			return nil, err
+		}
+		normCoefs, err := r.NormCoefficients()
+		if err != nil {
+			return nil, err
+		}
+		nu := r.reacOpts.targerMass / molars[target]
+		masses := make([]float64, len(molars))
+		for i, molar := range molars {
+			masses[i] = utils.RoundFloat(molar*nu*normCoefs[i], r.reacOpts.precision)
+		}
+
+		r.masses = &masses
+	}
+	return *r.masses, nil
 }

@@ -163,7 +163,12 @@ func (b *Balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64,
 
 	if len(coefficients) == matrLength &&
 		allPositive(coefficients) &&
-		isReactionBalanced(b.bAlgos.ReactantMatrix, b.bAlgos.ProductMatrix, coefficients, b.tolerance) {
+		isReactionBalanced(
+			b.bAlgos.ReactantMatrix,
+			b.bAlgos.ProductMatrix,
+			coefficients,
+			b.tolerance,
+		) {
 		if b.intify {
 			coefficients = b.intifyCoefs(coefficients, b.maxDenom)
 		}

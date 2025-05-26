@@ -3,6 +3,7 @@ package utils
 import (
 	"math"
 	"math/big"
+	"strings"
 )
 
 func StringCounter(s string) map[string]int {
@@ -205,4 +206,25 @@ func SymmetricDifference(slice1, slice2 []string) []string {
 	}
 
 	return result
+}
+
+func ReplaceNthOccurrence(s, old, new string, n int) string {
+	if n <= 0 || old == "" {
+		return s
+	}
+	start := 0
+	for i := 1; i <= n; i++ {
+		index := strings.Index(s[start:], old)
+		if index == -1 {
+			return s
+		}
+
+		if i == n {
+			actualIndex := start + index
+			return s[:actualIndex] + new + s[actualIndex+len(old):]
+		}
+		start = start + index + len(old)
+	}
+
+	return s
 }
