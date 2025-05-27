@@ -9,20 +9,20 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
-type FormulaValidator struct {
+type formulaValidator struct {
 	formula string
 }
 
-func (v FormulaValidator) emptyFormula() bool {
+func (v formulaValidator) emptyFormula() bool {
 	return v.formula == ""
 }
 
-func (v FormulaValidator) invalidCharacters() []string {
-	return regexes.allowedSymbols.FindAllString(v.formula, -1)
+func (v formulaValidator) invalidCharacters() []string {
+	return formRegexes.allowedSymbols.FindAllString(v.formula, -1)
 }
 
-func (v FormulaValidator) invalidAtoms() []string {
-	atoms := regexes.atomRegex.FindAllString(v.formula, -1)
+func (v formulaValidator) invalidAtoms() []string {
+	atoms := formRegexes.atomRegex.FindAllString(v.formula, -1)
 	invalid := make([]string, 0)
 	cFormula := strings.Clone(v.formula)
 	uniqueAtoms := utils.UniqueElems(atoms)
@@ -31,21 +31,21 @@ func (v FormulaValidator) invalidAtoms() []string {
 	})
 
 	for _, atom := range uniqueAtoms {
-		if !slices.Contains(PeriodicTableElements, atom) {
+		if !slices.Contains(periodicTableElements, atom) {
 			invalid = append(invalid, atom)
 		}
 		cFormula = strings.Replace(cFormula, atom, "", -1)
 	}
-	leftovers := regexes.letterRegex.FindAllString(cFormula, -1)
+	leftovers := formRegexes.letterRegex.FindAllString(cFormula, -1)
 	invalid = append(invalid, leftovers...)
 	return invalid
 }
 
-func (v FormulaValidator) bracketsBalance() bool {
+func (v formulaValidator) bracketsBalance() bool {
 	counter := utils.StringCounter(v.formula)
-	for i := range len(regexes.openerBrackets) {
-		open := string(regexes.openerBrackets[i])
-		close := string(regexes.closerBrackets[i])
+	for i := range len(formRegexes.openerBrackets) {
+		open := string(formRegexes.openerBrackets[i])
+		close := string(formRegexes.closerBrackets[i])
 		if counter[open] != counter[close] {
 			return false
 		}
@@ -53,16 +53,16 @@ func (v FormulaValidator) bracketsBalance() bool {
 	return true
 }
 
-func (v FormulaValidator) numOfAdducts() int {
+func (v formulaValidator) numOfAdducts() int {
 	counter := utils.StringCounter(v.formula)
 	i := 0
-	for _, adduct := range regexes.adductSymbols {
+	for _, adduct := range formRegexes.adductSymbols {
 		i += counter[string(adduct)]
 	}
 	return i
 }
 
-func (v FormulaValidator) validate() error {
+func (v formulaValidator) validate() error {
 	var err error
 	switch {
 	case v.emptyFormula():
@@ -75,10 +75,10 @@ func (v FormulaValidator) validate() error {
 			v.invalidAtoms(), v.formula)
 	case !v.bracketsBalance():
 		err = fmt.Errorf("Brackets %s %s are not balanced in the formula '%s'",
-			string(regexes.openerBrackets), string(regexes.closerBrackets), v.formula)
+			string(formRegexes.openerBrackets), string(formRegexes.closerBrackets), v.formula)
 	case v.numOfAdducts() > 1:
 		err = fmt.Errorf("There are more than 1 adduct symbol %s in the formula '%s'",
-			string(regexes.adductSymbols), v.formula)
+			string(formRegexes.adductSymbols), v.formula)
 	}
 	return err
 }

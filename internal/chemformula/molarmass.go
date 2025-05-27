@@ -7,29 +7,29 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
-type Oxide struct {
+type oxide struct {
 	metal   string
 	formula string
 	massP   float64
 }
 
-type MolarMass struct {
+type molarMass struct {
 	parsed []Atom
 }
 
-func (m MolarMass) atomicMasses() []float64 {
+func (m molarMass) atomicMasses() []float64 {
 	masses := make([]float64, len(m.parsed))
 	for i, atom := range m.parsed {
-		masses[i] = PeriodicTable[atom.Label].Weight * atom.Amount
+		masses[i] = periodicTable[atom.Label].weight * atom.Amount
 	}
 	return masses
 }
 
-func (m MolarMass) molarMass() float64 {
+func (m molarMass) molarMass() float64 {
 	return utils.SumFloatS(m.atomicMasses())
 }
 
-func (m MolarMass) massPercent() []Atom {
+func (m molarMass) massPercent() []Atom {
 	percent := make([]Atom, len(m.parsed))
 	atomicMasses := m.atomicMasses()
 	molarMass := m.molarMass()
@@ -39,7 +39,7 @@ func (m MolarMass) massPercent() []Atom {
 	return percent
 }
 
-func (m MolarMass) atomicPercent() []Atom {
+func (m molarMass) atomicPercent() []Atom {
 	percent := make([]Atom, len(m.parsed))
 	amounts := []float64{}
 	for _, atom := range m.parsed {
@@ -52,11 +52,11 @@ func (m MolarMass) atomicPercent() []Atom {
 	return percent
 }
 
-func (m MolarMass) customOxides(inOxides ...string) ([]Oxide, error) {
-	oxides := []Oxide{}
+func (m molarMass) customOxides(inOxides ...string) ([]oxide, error) {
+	oxides := []oxide{}
 	metals := []string{}
 	for _, cOxide := range inOxides {
-		validator := FormulaValidator{formula: cOxide}
+		validator := formulaValidator{formula: cOxide}
 		err := validator.validate()
 		if err != nil {
 			return nil, err
@@ -84,9 +84,9 @@ func (m MolarMass) customOxides(inOxides ...string) ([]Oxide, error) {
 			if slices.Contains(metals, atom.Label) {
 				label = cOxides[atom.Label]
 			} else {
-				label = PeriodicTable[atom.Label].DefaultOxide
+				label = periodicTable[atom.Label].defaultOxide
 			}
-			oxides = append(oxides, Oxide{metal: atom.Label, formula: label, massP: massPercents[i].Amount})
+			oxides = append(oxides, oxide{metal: atom.Label, formula: label, massP: massPercents[i].Amount})
 		}
 
 	}
@@ -94,7 +94,7 @@ func (m MolarMass) customOxides(inOxides ...string) ([]Oxide, error) {
 	return oxides, nil
 }
 
-func (m MolarMass) oxidePercent(inOxides ...string) ([]Atom, error) {
+func (m molarMass) oxidePercent(inOxides ...string) ([]Atom, error) {
 	ret := []Atom{}
 	oxides, err := m.customOxides(inOxides...)
 	if err != nil {
@@ -104,9 +104,9 @@ func (m MolarMass) oxidePercent(inOxides ...string) ([]Atom, error) {
 	oxPercents := []float64{}
 	for _, oxide := range oxides {
 		parsedOxide := ChemicalFormulaParser{}.parse(oxide.formula)
-		oxideMass := MolarMass{parsedOxide}.molarMass()
+		oxideMass := molarMass{parsedOxide}.molarMass()
 		atomicOxideCoef := parsedOxide[0].Amount
-		atomicMass := PeriodicTable[oxide.metal].Weight
+		atomicMass := periodicTable[oxide.metal].weight
 		convFactor := oxideMass / atomicMass / atomicOxideCoef
 		oxPercents = append(oxPercents, oxide.massP*convFactor)
 	}

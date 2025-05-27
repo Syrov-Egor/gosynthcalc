@@ -26,7 +26,7 @@ func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, er
 	}
 
 	newFormula := strings.Replace(formula, " ", "", -1)
-	validator := FormulaValidator{formula: newFormula}
+	validator := formulaValidator{formula: newFormula}
 	err := validator.validate()
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *ChemicalFormula) ParsedFormula() []Atom {
 
 func (c *ChemicalFormula) MolarMass() float64 {
 	if c.molarMass == nil {
-		mass := MolarMass{c.ParsedFormula()}.molarMass()
+		mass := molarMass{c.ParsedFormula()}.molarMass()
 		mass = utils.RoundFloat(mass, c.precision)
 		c.molarMass = &mass
 	}
@@ -62,7 +62,7 @@ func (c *ChemicalFormula) MolarMass() float64 {
 
 func (c *ChemicalFormula) MassPercent() []Atom {
 	if c.massPercent == nil {
-		percent := MolarMass{c.ParsedFormula()}.massPercent()
+		percent := molarMass{c.ParsedFormula()}.massPercent()
 		percent = roundAtomS(percent, c.precision)
 		c.massPercent = &percent
 	}
@@ -71,7 +71,7 @@ func (c *ChemicalFormula) MassPercent() []Atom {
 
 func (c *ChemicalFormula) AtomicPercent() []Atom {
 	if c.atomicPercent == nil {
-		percent := MolarMass{c.ParsedFormula()}.atomicPercent()
+		percent := molarMass{c.ParsedFormula()}.atomicPercent()
 		percent = roundAtomS(percent, c.precision)
 		c.atomicPercent = &percent
 	}
@@ -80,7 +80,7 @@ func (c *ChemicalFormula) AtomicPercent() []Atom {
 
 func (c *ChemicalFormula) OxidePercent(inOxides ...string) ([]Atom, error) {
 	if c.oxidePercent == nil {
-		percent, err := MolarMass{c.ParsedFormula()}.oxidePercent(inOxides...)
+		percent, err := molarMass{c.ParsedFormula()}.oxidePercent(inOxides...)
 		if err != nil {
 			return nil, err
 		}

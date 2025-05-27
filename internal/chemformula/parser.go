@@ -9,7 +9,7 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
-type Regexes struct {
+type regexes struct {
 	atomRegex        *regexp.Regexp
 	coefRegex        *regexp.Regexp
 	atomAndCoefRegex *regexp.Regexp
@@ -20,7 +20,7 @@ type Regexes struct {
 	adductSymbols    []rune
 }
 
-var regexes Regexes = Regexes{
+var formRegexes regexes = regexes{
 	atomRegex:        regexp.MustCompile(`([A-Z][a-z]*)`),
 	coefRegex:        regexp.MustCompile(`((\d+(\.\d+)?)*)`),
 	atomAndCoefRegex: regexp.MustCompile(`([A-Z][a-z]*)((\d+(\.\d+)?)*)`),
@@ -51,8 +51,8 @@ func (p ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, i
 		token := rune(formula[i])
 		switch {
 
-		case slices.Contains(regexes.adductSymbols, token):
-			matches := regexes.coefRegex.FindStringSubmatch(formula[i+1:])
+		case slices.Contains(formRegexes.adductSymbols, token):
+			matches := formRegexes.coefRegex.FindStringSubmatch(formula[i+1:])
 			weight := 1.0
 
 			if len(matches) > 0 && matches[0] != "" {
@@ -64,8 +64,8 @@ func (p ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, i
 			mol = p.fuse(mol, submol, 1.0)
 			i += lenght + 1
 
-		case slices.Contains(regexes.closerBrackets, token):
-			matches := regexes.coefRegex.FindStringSubmatch(formula[i+1:])
+		case slices.Contains(formRegexes.closerBrackets, token):
+			matches := formRegexes.coefRegex.FindStringSubmatch(formula[i+1:])
 			weight := 1.0
 
 			if len(matches) > 0 && matches[0] != "" {
@@ -74,10 +74,10 @@ func (p ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, i
 			}
 
 			tokenStr := string(tokens)
-			submol := p.toMap(regexes.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1))
+			submol := p.toMap(formRegexes.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1))
 			return p.fuse(mol, submol, weight), i
 
-		case slices.Contains(regexes.openerBrackets, token):
+		case slices.Contains(formRegexes.openerBrackets, token):
 			submol, length := p.parseToMap(formula[i+1:])
 			mol = p.fuse(mol, submol, 1.0)
 			i += length + 1
@@ -88,7 +88,7 @@ func (p ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, i
 		i++
 	}
 	tokenStr := string(tokens)
-	extractFromTokens := regexes.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1)
+	extractFromTokens := formRegexes.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1)
 	fusedMap := p.fuse(mol, p.toMap(extractFromTokens), 1.0)
 
 	return fusedMap, i
@@ -127,7 +127,7 @@ func (p ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 
 func (p ChemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
 	ret := make([]Atom, len(parsed))
-	atomMatch := regexes.atomRegex.FindAllString(formula, -1)
+	atomMatch := formRegexes.atomRegex.FindAllString(formula, -1)
 	unique := utils.UniqueElems(atomMatch)
 	for i, match := range unique {
 		ret[i] = Atom{Label: match, Amount: parsed[match]}
