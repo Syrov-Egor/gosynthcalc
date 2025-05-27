@@ -1,6 +1,7 @@
 package chemformula
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -33,6 +34,10 @@ var regexes Regexes = Regexes{
 type Atom struct {
 	Label  string
 	Amount float64
+}
+
+func (a Atom) String() string {
+	return fmt.Sprintf("'%s': %v", a.Label, a.Amount)
 }
 
 type ChemicalFormulaParser struct{}
