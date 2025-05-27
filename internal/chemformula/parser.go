@@ -40,9 +40,9 @@ func (a Atom) String() string {
 	return fmt.Sprintf("'%s': %v", a.Label, a.Amount)
 }
 
-type ChemicalFormulaParser struct{}
+type chemicalFormulaParser struct{}
 
-func (p ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, int) {
+func (p chemicalFormulaParser) parseToMap(formula string) (map[string]float64, int) {
 	tokens := []rune{}
 	mol := make(map[string]float64)
 	i := 0
@@ -94,7 +94,7 @@ func (p ChemicalFormulaParser) parseToMap(formula string) (map[string]float64, i
 	return fusedMap, i
 }
 
-func (p ChemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
+func (p chemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
 	fused := make(map[string]float64)
 	for atom, count := range mol1 {
 		fused[atom] += count * weight
@@ -105,7 +105,7 @@ func (p ChemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float6
 	return fused
 }
 
-func (p ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
+func (p chemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 	result := make(map[string]float64)
 
 	for _, match := range matches {
@@ -125,7 +125,7 @@ func (p ChemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
 	return result
 }
 
-func (p ChemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
+func (p chemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
 	ret := make([]Atom, len(parsed))
 	atomMatch := formRegexes.atomRegex.FindAllString(formula, -1)
 	unique := utils.UniqueElems(atomMatch)
@@ -135,7 +135,7 @@ func (p ChemicalFormulaParser) order(formula string, parsed map[string]float64) 
 	return ret
 }
 
-func (p ChemicalFormulaParser) parse(formula string) []Atom {
+func (p chemicalFormulaParser) parse(formula string) []Atom {
 	parsed, _ := p.parseToMap(formula)
 	res := p.order(formula, parsed)
 	return res

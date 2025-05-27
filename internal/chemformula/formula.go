@@ -44,7 +44,7 @@ func (c *ChemicalFormula) Formula() string {
 
 func (c *ChemicalFormula) ParsedFormula() []Atom {
 	if c.parsedFormula == nil {
-		parser := ChemicalFormulaParser{}
+		parser := chemicalFormulaParser{}
 		parsed := parser.parse(c.formula)
 		c.parsedFormula = &parsed
 	}
