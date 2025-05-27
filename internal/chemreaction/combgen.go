@@ -6,19 +6,19 @@ import (
 	"sync"
 )
 
-type MultiCombinationGenerator struct {
+type multiCombinationGenerator struct {
 	maxCoef int
 	k       int
 }
 
-func NewMultiCombinationGenerator(maxCoef, k int) *MultiCombinationGenerator {
-	return &MultiCombinationGenerator{
+func newMultiCombinationGenerator(maxCoef, k int) *multiCombinationGenerator {
+	return &multiCombinationGenerator{
 		maxCoef: maxCoef,
 		k:       k,
 	}
 }
 
-func (m *MultiCombinationGenerator) Generate(numWorkers int) <-chan []int {
+func (m *multiCombinationGenerator) generate(numWorkers int) <-chan []int {
 	if numWorkers <= 0 {
 		numWorkers = runtime.GOMAXPROCS(0)
 	}

@@ -46,7 +46,7 @@ type reactionDecomposer struct {
 	products     []string
 }
 
-func NewReactionDecomposer(reaction string) (*reactionDecomposer, error) {
+func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 	separator := extractSeparator(reaction)
 	initReactants := strings.Split(strings.Split(reaction, separator)[0], reactionRegexes.reactantSeparator)
 	initProducts := strings.Split(strings.Split(reaction, separator)[1], reactionRegexes.reactantSeparator)

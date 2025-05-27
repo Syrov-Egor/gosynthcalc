@@ -9,13 +9,13 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-type Balancer struct {
+type balancer struct {
 	reactionMatrix *mat.Dense
 	separatorPos   int
 	intify         bool
 	tolerance      float64
 	precision      uint
-	bAlgos         *BalancingAlgos
+	bAlgos         *balancingAlgos
 	maxDenom       int
 }
 
@@ -24,7 +24,7 @@ type MethodResult struct {
 	Result []float64
 }
 
-func NewBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uint, tolerance ...float64) *Balancer {
+func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uint, tolerance ...float64) *balancer {
 	var tol float64
 	if tolerance == nil {
 		tol = 1e-8
@@ -32,9 +32,9 @@ func NewBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 		tol = tolerance[0]
 	}
 
-	bAlgos := NewBalancingAlgos(matrix, separatorPos, tol)
+	bAlgos := newBalancingAlgos(matrix, separatorPos, tol)
 
-	return &Balancer{
+	return &balancer{
 		reactionMatrix: matrix,
 		separatorPos:   separatorPos,
 		intify:         intify,
@@ -45,7 +45,7 @@ func NewBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 	}
 }
 
-func (b *Balancer) reduceCoefficients(coeffs []float64) ([]int64, error) {
+func (b *balancer) reduceCoefficients(coeffs []float64) ([]int64, error) {
 	return reduceCoefficientsWithDenomLimit(coeffs, int64(b.maxDenom))
 }
 
@@ -89,7 +89,7 @@ func reduceCoefficientsWithDenomLimit(coeffs []float64, maxDenominator int64) ([
 	return result, nil
 }
 
-func (b *Balancer) intifyCoefs(coefs []float64, limit int) []float64 {
+func (b *balancer) intifyCoefs(coefs []float64, limit int) []float64 {
 
 	reduced, err := b.reduceCoefficients(coefs)
 	if err != nil {
@@ -129,29 +129,29 @@ func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coe
 	return false
 }
 
-func (b *Balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64, error) {
+func (b *balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64, error) {
 	var coefficients []float64
 	var err error
 	errm := fmt.Errorf("Can't balance reaction by %s method", method)
 
 	switch method {
 	case "inv":
-		coefficients, err = b.bAlgos.InvAlgorithm()
+		coefficients, err = b.bAlgos.invAlgorithm()
 		if err != nil {
 			return nil, errm
 		}
 	case "gpinv":
-		coefficients, err = b.bAlgos.GPInvAlgorithm()
+		coefficients, err = b.bAlgos.gPInvAlgorithm()
 		if err != nil {
 			return nil, errm
 		}
 	case "ppinv":
-		coefficients, err = b.bAlgos.PPInvAlgorithm()
+		coefficients, err = b.bAlgos.pPInvAlgorithm()
 		if err != nil {
 			return nil, errm
 		}
 	case "comb":
-		coefficients = b.bAlgos.Combinatorial(maxCoef[0])
+		coefficients = b.bAlgos.combinatorial(maxCoef[0])
 		if coefficients == nil {
 			return nil, errm
 		}
@@ -178,7 +178,7 @@ func (b *Balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64,
 	return nil, fmt.Errorf("Wrong coefficients")
 }
 
-func (b *Balancer) Inv() ([]float64, error) {
+func (b *balancer) Inv() ([]float64, error) {
 	res, err := b.calculateByMethod("inv")
 	if err != nil {
 		return nil, err
@@ -186,7 +186,7 @@ func (b *Balancer) Inv() ([]float64, error) {
 	return res, nil
 }
 
-func (b *Balancer) GPinv() ([]float64, error) {
+func (b *balancer) GPinv() ([]float64, error) {
 	res, err := b.calculateByMethod("gpinv")
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func (b *Balancer) GPinv() ([]float64, error) {
 	return res, nil
 }
 
-func (b *Balancer) PPinv() ([]float64, error) {
+func (b *balancer) PPinv() ([]float64, error) {
 	res, err := b.calculateByMethod("ppinv")
 	if err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func (b *Balancer) PPinv() ([]float64, error) {
 	return res, nil
 }
 
-func (b *Balancer) Comb(maxCoef uint) ([]float64, error) {
+func (b *balancer) Comb(maxCoef uint) ([]float64, error) {
 	res, err := b.calculateByMethod("comb", maxCoef)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (b *Balancer) Comb(maxCoef uint) ([]float64, error) {
 	return res, nil
 }
 
-func (b *Balancer) Auto() (MethodResult, error) {
+func (b *balancer) Auto() (MethodResult, error) {
 	var coefs []float64
 	var err error
 

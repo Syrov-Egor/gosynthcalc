@@ -27,7 +27,7 @@ func (v reactionValidator) noReacSeparator() bool {
 
 func (v reactionValidator) validate() (*reactionDecomposer, error) {
 	var err error
-	decomp, err := NewReactionDecomposer(v.reaction)
+	decomp, err := newReactionDecomposer(v.reaction)
 	if err != nil {
 		return nil, err
 	}

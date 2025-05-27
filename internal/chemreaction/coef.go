@@ -7,14 +7,14 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
-type Coeffs struct {
+type coeffs struct {
 	mode               Mode
 	parsedFormulas     [][]chemformula.Atom
 	decomposedReaction *reactionDecomposer
-	balancer           *Balancer
+	balancer           *balancer
 }
 
-func (c *Coeffs) calculateCoeffs() (MethodResult, error) {
+func (c *coeffs) calculateCoeffs() (MethodResult, error) {
 	user := "user"
 	switch c.mode {
 
@@ -43,7 +43,7 @@ func (c *Coeffs) calculateCoeffs() (MethodResult, error) {
 	}
 }
 
-func (c *Coeffs) validateCoeffs(coefs []float64) error {
+func (c *coeffs) validateCoeffs(coefs []float64) error {
 	_, cols := c.balancer.reactionMatrix.Dims()
 
 	switch {
@@ -56,7 +56,7 @@ func (c *Coeffs) validateCoeffs(coefs []float64) error {
 	}
 }
 
-func (c *Coeffs) elementCountValidation() []string {
+func (c *coeffs) elementCountValidation() []string {
 	if c.mode != force {
 		r := make([]string, 0)
 		reactants := c.parsedFormulas[:c.balancer.separatorPos]
@@ -84,7 +84,7 @@ func (c *Coeffs) elementCountValidation() []string {
 	return nil
 }
 
-func (c *Coeffs) getCoeffs() (MethodResult, error) {
+func (c *coeffs) getCoeffs() (MethodResult, error) {
 	user := "user"
 	nilStr := MethodResult{Method: user, Result: nil}
 

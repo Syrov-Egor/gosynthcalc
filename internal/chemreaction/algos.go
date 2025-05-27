@@ -12,7 +12,7 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-type BalancingAlgos struct {
+type balancingAlgos struct {
 	ReactionMatrix *mat.Dense
 	SeparatorPos   int
 	ReactantMatrix *mat.Dense
@@ -24,7 +24,7 @@ type BalancingAlgos struct {
 	Tolerance      float64
 }
 
-func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ...float64) *BalancingAlgos {
+func newBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ...float64) *balancingAlgos {
 	rows, cols := reactionMatrix.Dims()
 	reactantMatrix := mat.NewDense(rows, separatorPos, nil)
 	for i := range rows {
@@ -48,7 +48,7 @@ func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 		tol = tolerance[0]
 	}
 
-	return &BalancingAlgos{
+	return &balancingAlgos{
 		ReactionMatrix: reactionMatrix,
 		SeparatorPos:   separatorPos,
 		ReactantMatrix: reactantMatrix,
@@ -61,7 +61,7 @@ func NewBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 	}
 }
 
-func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
+func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
 	rows, cols := b.ReactionMatrix.Dims()
 	reactionMatrix := mat.DenseCopyOf(b.ReactionMatrix)
 	var zerosAdded int
@@ -140,7 +140,7 @@ func (b *BalancingAlgos) InvAlgorithm() ([]float64, error) {
 	return coefs, nil
 }
 
-func (b *BalancingAlgos) GPInvAlgorithm() ([]float64, error) {
+func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 	rows, cols := b.ReactionMatrix.Dims()
 
 	matrix := mat.NewDense(rows, cols, nil)
@@ -183,7 +183,7 @@ func (b *BalancingAlgos) GPInvAlgorithm() ([]float64, error) {
 	return result, nil
 }
 
-func (b *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
+func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	reactantRows, reactantCols := b.ReactantMatrix.Dims()
 
 	mpInverse, err := computePseudoinverse(b.ReactantMatrix, b.Tolerance)
@@ -271,12 +271,12 @@ func (b *BalancingAlgos) PPInvAlgorithm() ([]float64, error) {
 	return coefs, nil
 }
 
-func (b *BalancingAlgos) Combinatorial(maxCoef uint) []float64 {
+func (b *balancingAlgos) combinatorial(maxCoef uint) []float64 {
 	iMaxCoef := int(maxCoef)
 	_, cols := b.ReactionMatrix.Dims()
 	numWorkers := runtime.GOMAXPROCS(0)
-	gen := NewMultiCombinationGenerator(iMaxCoef, cols)
-	combinations := gen.Generate(numWorkers)
+	gen := newMultiCombinationGenerator(iMaxCoef, cols)
+	combinations := gen.generate(numWorkers)
 
 	resultChan := make(chan []int, 1)
 	var activeWorkers int32
