@@ -1,9 +1,11 @@
 package chemreaction
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/Syrov-Egor/gosynthcalc/internal/chemformula"
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
@@ -11,6 +13,7 @@ import (
 )
 
 //TODO! test case "Fe2O3+C=Fe3O4+FeO+Fe+Fe3C+CO+CO2++++"
+//TODO! test case "H2O2+KNO3+H2SO4=K2SO4+NO+H2O+O2,"
 
 type ChemicalReaction struct {
 	reaction       string
@@ -35,6 +38,10 @@ const (
 	check
 	balance
 )
+
+func (m Mode) String() string {
+	return [...]string{"force", "check", "balance"}[m]
+}
 
 type ReacOptions struct {
 	mode       Mode
@@ -293,4 +300,107 @@ func (r *ChemicalReaction) Masses() ([]float64, error) {
 		r.masses = &masses
 	}
 	return *r.masses, nil
+}
+
+func (r *ChemicalReaction) Output(printPrecision ...uint) (crOutput, error) {
+	var pPrecision uint
+	if printPrecision == nil {
+		pPrecision = 4
+	} else {
+		pPrecision = printPrecision[0]
+	}
+
+	matr, err := r.Matrix()
+	if err != nil {
+		return crOutput{}, err
+	}
+	matrix := mat.Formatted(matr)
+	coefs, err := r.Coefficients()
+	if err != nil {
+		return crOutput{}, err
+	}
+	ncoefs, err := r.NormCoefficients()
+	if err != nil {
+		return crOutput{}, err
+	}
+	fReaction, err := r.FinalReaction()
+	if err != nil {
+		return crOutput{}, err
+	}
+	nfReaction, err := r.FinalReactionNorm()
+	if err != nil {
+		return crOutput{}, err
+	}
+	mMasses, err := r.MolarMasses()
+	if err != nil {
+		return crOutput{}, err
+	}
+	target, err := r.calculatedTarget()
+	if err != nil {
+		return crOutput{}, err
+	}
+	mass, err := r.Masses()
+	if err != nil {
+		return crOutput{}, err
+	}
+
+	crO := crOutput{
+		Reaction:          r.reaction,
+		Matrix:            fmt.Sprintf("%v", matrix),
+		Mode:              r.reacOpts.mode.String(),
+		Formulas:          r.decomposer.compounds,
+		Coefficients:      coefs.Result,
+		NormCoefficients:  ncoefs,
+		Algorithm:         coefs.Method,
+		IsBalanced:        r.IsBalanced(),
+		FinalReaction:     fReaction,
+		FinalReactionNorm: nfReaction,
+		MolarMasses:       utils.RoundFloatS(mMasses, pPrecision),
+		Target:            r.decomposer.compounds[target],
+		Masses:            utils.RoundFloatS(mass, pPrecision),
+	}
+	return crO, nil
+}
+
+type crOutput struct {
+	Reaction          string
+	Matrix            string
+	Mode              string
+	Formulas          []string
+	Coefficients      []float64
+	NormCoefficients  []float64
+	Algorithm         string
+	IsBalanced        bool
+	FinalReaction     string
+	FinalReactionNorm string
+	MolarMasses       []float64
+	Target            string
+	Masses            []float64
+}
+
+func (o crOutput) String() string {
+	out := fmt.Sprintln("initial reaction:", o.Reaction) +
+		fmt.Sprint("reaction matrix:\n", o.Matrix, "\n") +
+		fmt.Sprintln("mode:", o.Mode) +
+		fmt.Sprintln("formulas:", o.Formulas) +
+		fmt.Sprintln("coefficients:", o.Coefficients) +
+		fmt.Sprintln("coefficients normalized:", o.NormCoefficients) +
+		fmt.Sprintln("algorithm:", o.Algorithm) +
+		fmt.Sprintln("is balanced:", o.IsBalanced) +
+		fmt.Sprintln("final reaction:", o.FinalReaction) +
+		fmt.Sprintln("final reaction normalized:", o.FinalReactionNorm) +
+		fmt.Sprintln("molar masses:", o.MolarMasses) +
+		fmt.Sprintln("target:", o.Target) +
+		fmt.Sprintln("masses:", o.Masses)
+
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+
+	for i, comp := range o.Formulas {
+		fmt.Fprintf(w, "%s\tM = %v\tg/mol\tm = %v\tg\n",
+			comp, o.MolarMasses[i], o.Masses[i])
+	}
+
+	w.Flush()
+	return out + strings.TrimSuffix(buf.String(), "\n")
 }
