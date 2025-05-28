@@ -14,6 +14,7 @@ type regexes struct {
 	coefRegex        *regexp.Regexp
 	atomAndCoefRegex *regexp.Regexp
 	letterRegex      *regexp.Regexp
+	noLetterRegex    *regexp.Regexp
 	allowedSymbols   *regexp.Regexp
 	openerBrackets   []rune
 	closerBrackets   []rune
@@ -25,6 +26,7 @@ var formRegexes regexes = regexes{
 	coefRegex:        regexp.MustCompile(`((\d+(\.\d+)?)*)`),
 	atomAndCoefRegex: regexp.MustCompile(`([A-Z][a-z]*)((\d+(\.\d+)?)*)`),
 	letterRegex:      regexp.MustCompile(`[a-z]`),
+	noLetterRegex:    regexp.MustCompile(`[A-Za-z]`),
 	allowedSymbols:   regexp.MustCompile(`[^A-Za-z0-9.({[)}\]*·•]`),
 	openerBrackets:   []rune{'(', '[', '{'},
 	closerBrackets:   []rune{')', ']', '}'},

@@ -17,6 +17,10 @@ func (v formulaValidator) emptyFormula() bool {
 	return v.formula == ""
 }
 
+func (v formulaValidator) noLetters() bool {
+	return formRegexes.noLetterRegex.FindAllString(v.formula, -1) == nil
+}
+
 func (v formulaValidator) invalidCharacters() []string {
 	return formRegexes.allowedSymbols.FindAllString(v.formula, -1)
 }
@@ -67,6 +71,9 @@ func (v formulaValidator) validate() error {
 	switch {
 	case v.emptyFormula():
 		err = fmt.Errorf("Empty formula string")
+	case v.noLetters():
+		err = fmt.Errorf("No letters A-Z or a-z in the formula '%s'",
+			v.formula)
 	case len(v.invalidCharacters()) > 0:
 		err = fmt.Errorf("There are invalid character(s) %s in the formula '%s'",
 			v.invalidCharacters(), v.formula)
