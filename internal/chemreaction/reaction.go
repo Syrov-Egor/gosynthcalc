@@ -13,7 +13,6 @@ import (
 )
 
 //TODO! test case "Fe2O3+C=Fe3O4+FeO+Fe+Fe3C+CO+CO2++++"
-//TODO! test case "H2O2+KNO3+H2SO4=K2SO4+NO+H2O+O2,"
 
 type chemicalReaction struct {
 	reaction       string
