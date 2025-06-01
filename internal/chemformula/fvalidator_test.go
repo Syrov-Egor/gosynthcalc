@@ -72,7 +72,7 @@ func TestFormulaValidator_noLetters(t *testing.T) {
 			v := formulaValidator{formula: tt.formula}
 			result := v.noLetters()
 			if result != tt.expected {
-				t.Errorf("emptyFormula() = %v, expected %v", result, tt.expected)
+				t.Errorf("noLetters() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}
