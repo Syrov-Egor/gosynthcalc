@@ -1,6 +1,7 @@
 package chemreaction
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -47,6 +48,10 @@ type reactionDecomposer struct {
 }
 
 func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
+	if reaction == "" {
+		return nil, fmt.Errorf("Empty reaction string")
+	}
+
 	separator := extractSeparator(reaction)
 	initReactants := strings.Split(strings.Split(reaction, separator)[0], reactionRegexes.reactantSeparator)
 	initProducts := strings.Split(strings.Split(reaction, separator)[1], reactionRegexes.reactantSeparator)
