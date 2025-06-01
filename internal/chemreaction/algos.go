@@ -91,14 +91,20 @@ func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
 	}
 	nullity := cols - rank
 
-	augument := mat.NewDense(nullity, cols, nil)
-	for i := range nullity {
-		augument.Set(i, cols-i-1, 1.0)
-	}
+	var augumentedMatrix *mat.Dense
 
-	augumentedMatrix := mat.NewDense(rows+nullity, cols, nil)
-	augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
-	augumentedMatrix.Slice(rows, rows+nullity, 0, cols).(*mat.Dense).Copy(augument)
+	if nullity > 0 {
+		augument := mat.NewDense(nullity, cols, nil)
+		for i := range nullity {
+			augument.Set(i, cols-i-1, 1.0)
+		}
+		augumentedMatrix = mat.NewDense(rows+nullity, cols, nil)
+		augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
+		augumentedMatrix.Slice(rows, rows+nullity, 0, cols).(*mat.Dense).Copy(augument)
+	} else {
+		augumentedMatrix = mat.NewDense(rows, cols, nil)
+		augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
+	}
 
 	nonZeroRows := findNonZeroRows(augumentedMatrix, b.Tolerance)
 	if len(nonZeroRows) < rows+nullity {
