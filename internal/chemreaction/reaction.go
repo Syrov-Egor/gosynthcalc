@@ -40,6 +40,18 @@ func (m Mode) String() string {
 	return [...]string{"force", "check", "balance"}[m]
 }
 
+/*
+defaults are
+
+	ReacOptions{
+					mode:       balance,
+					target:     0,
+					targerMass: 1.0,
+					intify:     true,
+					precision:  8,
+					tolerance:  1e-8,
+				}
+*/
 type ReacOptions struct {
 	mode       Mode
 	target     int
