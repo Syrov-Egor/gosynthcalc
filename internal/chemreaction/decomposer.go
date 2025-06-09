@@ -56,7 +56,10 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 	initReactants := strings.Split(strings.Split(reaction, separator)[0], reactionRegexes.reactantSeparator)
 	initProducts := strings.Split(strings.Split(reaction, separator)[1], reactionRegexes.reactantSeparator)
 	splitted := []compound{}
-	for _, form := range append(initReactants, initProducts...) {
+	for i, form := range append(initReactants, initProducts...) {
+		if len(form) == 0 {
+			return nil, fmt.Errorf("compound %d is empty, maybe there are two adjacent +?", i+1)
+		}
 		spltCompound, err := splitCoefFromFormula(form)
 		if err != nil {
 			return nil, err

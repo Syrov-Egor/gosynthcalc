@@ -12,8 +12,6 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-//TODO! test case "Fe2O3+C=Fe3O4+FeO+Fe+Fe3C+CO+CO2++++"
-
 type chemicalReaction struct {
 	reaction       string
 	reacOpts       ReacOptions
