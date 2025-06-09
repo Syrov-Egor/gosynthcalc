@@ -14,7 +14,7 @@ reaction matrix:
 ⎡2  0  3  1  1  3  0  0⎤
 ⎢3  0  4  1  0  0  1  2⎥
 ⎣0  1  0  0  0  1  1  1⎦
-mode: balance
+mode: Balance
 formulas: [Fe2O3 C Fe3O4 FeO Fe Fe3C CO CO2]
 coefficients: [1954 1854 518 1093 1096 55 901 898]
 coefficients normalized: [3.77220077 3.57915058 1 2.11003861 2.11583012 0.10617761 1.73938224 1.73359073]
@@ -41,7 +41,7 @@ CO2    M = 44.009   g/mol  m = 0.3295  g`
 func TestChemicalReaction_forceMode(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
 	reacOpts := ReacOptions{
-		mode:       force,
+		mode:       Force,
 		target:     0,
 		targerMass: 1.0,
 		intify:     true,
@@ -59,7 +59,7 @@ func TestChemicalReaction_forceMode(t *testing.T) {
 func TestChemicalReaction_checkModeRight(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+3Br2+16NaOH=6NaBr+2Na2CrO4+3Na2SO4+8H2O"
 	reacOpts := ReacOptions{
-		mode:       check,
+		mode:       Check,
 		target:     0,
 		targerMass: 1.0,
 		intify:     true,
@@ -77,7 +77,7 @@ func TestChemicalReaction_checkModeRight(t *testing.T) {
 func TestChemicalReaction_checkModeWrong(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
 	reacOpts := ReacOptions{
-		mode:       check,
+		mode:       Check,
 		target:     0,
 		targerMass: 1.0,
 		intify:     true,

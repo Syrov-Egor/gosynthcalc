@@ -12,7 +12,7 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-type chemicalReaction struct {
+type ChemicalReaction struct {
 	reaction       string
 	reacOpts       ReacOptions
 	decomposer     *reactionDecomposer
@@ -31,20 +31,20 @@ type chemicalReaction struct {
 type Mode int
 
 const (
-	force Mode = iota
-	check
-	balance
+	Force Mode = iota
+	Check
+	Balance
 )
 
 func (m Mode) String() string {
-	return [...]string{"force", "check", "balance"}[m]
+	return [...]string{"Force", "Check", "Balance"}[m]
 }
 
 /*
 defaults are
 
 	ReacOptions{
-					mode:       balance,
+					mode:       Balance,
 					target:     0,
 					targerMass: 1.0,
 					intify:     true,
@@ -61,7 +61,7 @@ type ReacOptions struct {
 	tolerance  float64
 }
 
-func NewChemicalReaction(reaction string, options ...ReacOptions) (*chemicalReaction, error) {
+func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReaction, error) {
 	newReaction := strings.Replace(reaction, " ", "", -1)
 	validator := reactionValidator{reaction: newReaction}
 	decomp, err := validator.validate()
@@ -72,7 +72,7 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*chemicalReac
 	var reacOpt ReacOptions
 	if options == nil {
 		reacOpt = ReacOptions{
-			mode:       balance,
+			mode:       Balance,
 			target:     0,
 			targerMass: 1.0,
 			intify:     true,
@@ -83,14 +83,14 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*chemicalReac
 		reacOpt = options[0]
 	}
 
-	return &chemicalReaction{
+	return &ChemicalReaction{
 		reaction:   newReaction,
 		decomposer: decomp,
 		reacOpts:   reacOpt,
 	}, nil
 }
 
-func (r *chemicalReaction) calculatedTarget() (int, error) {
+func (r *ChemicalReaction) calculatedTarget() (int, error) {
 	high := len(r.decomposer.products) - 1
 	low := -len(r.decomposer.reactants)
 	if r.reacOpts.target <= high && r.reacOpts.target >= low {
@@ -104,7 +104,7 @@ func (r *chemicalReaction) calculatedTarget() (int, error) {
 	)
 }
 
-func (r *chemicalReaction) ChemFormulas() ([]chemformula.ChemicalFormula, error) {
+func (r *ChemicalReaction) ChemFormulas() ([]chemformula.ChemicalFormula, error) {
 	if r.chemFormulas == nil {
 		formulas := []chemformula.ChemicalFormula{}
 		for _, compound := range r.decomposer.compounds {
@@ -119,7 +119,7 @@ func (r *chemicalReaction) ChemFormulas() ([]chemformula.ChemicalFormula, error)
 	return *r.chemFormulas, nil
 }
 
-func (r *chemicalReaction) ParsedFormulas() ([][]chemformula.Atom, error) {
+func (r *ChemicalReaction) ParsedFormulas() ([][]chemformula.Atom, error) {
 	if r.parsedFormulas == nil {
 		c, err := r.ChemFormulas()
 		if err != nil {
@@ -136,7 +136,7 @@ func (r *chemicalReaction) ParsedFormulas() ([][]chemformula.Atom, error) {
 	return *r.parsedFormulas, nil
 }
 
-func (r *chemicalReaction) MolarMasses() ([]float64, error) {
+func (r *ChemicalReaction) MolarMasses() ([]float64, error) {
 	if r.molarMasses == nil {
 		masses := make([]float64, len(r.decomposer.compounds))
 		formulas, err := r.ChemFormulas()
@@ -151,7 +151,7 @@ func (r *chemicalReaction) MolarMasses() ([]float64, error) {
 	return *r.molarMasses, nil
 }
 
-func (r *chemicalReaction) Matrix() (*mat.Dense, error) {
+func (r *ChemicalReaction) Matrix() (*mat.Dense, error) {
 	if r.matrix == nil {
 		parsed, err := r.ParsedFormulas()
 		if err != nil {
@@ -163,7 +163,7 @@ func (r *chemicalReaction) Matrix() (*mat.Dense, error) {
 	return r.matrix, nil
 }
 
-func (r *chemicalReaction) Balancer() (*balancer, error) {
+func (r *ChemicalReaction) Balancer() (*balancer, error) {
 	mat, err := r.Matrix()
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func (r *chemicalReaction) Balancer() (*balancer, error) {
 	return r.balancer, nil
 }
 
-func (r *chemicalReaction) Coefficients() (*MethodResult, error) {
+func (r *ChemicalReaction) Coefficients() (*MethodResult, error) {
 	if r.coefs == nil {
 		parsed, err := r.ParsedFormulas()
 		if err != nil {
@@ -205,7 +205,7 @@ func (r *chemicalReaction) Coefficients() (*MethodResult, error) {
 	return r.coefs, nil
 }
 
-func (r *chemicalReaction) NormCoefficients() ([]float64, error) {
+func (r *ChemicalReaction) NormCoefficients() ([]float64, error) {
 	if r.normCoefs == nil {
 		coefs, err := r.Coefficients()
 		if err != nil {
@@ -227,7 +227,7 @@ func (r *chemicalReaction) NormCoefficients() ([]float64, error) {
 	return *r.normCoefs, nil
 }
 
-func (r *chemicalReaction) IsBalanced() bool {
+func (r *ChemicalReaction) IsBalanced() bool {
 	coefs, _ := r.Coefficients()
 	bal, _ := r.Balancer()
 	return isReactionBalanced(
@@ -238,7 +238,7 @@ func (r *chemicalReaction) IsBalanced() bool {
 	)
 }
 
-func (r *chemicalReaction) generateFinalReaction(coefs []float64) string {
+func (r *ChemicalReaction) generateFinalReaction(coefs []float64) string {
 	final := []string{}
 	for i, compound := range r.decomposer.compounds {
 		if coefs[i] != 1.0 {
@@ -262,7 +262,7 @@ func (r *chemicalReaction) generateFinalReaction(coefs []float64) string {
 	return replaced
 }
 
-func (r *chemicalReaction) FinalReaction() (string, error) {
+func (r *ChemicalReaction) FinalReaction() (string, error) {
 	if r.finalReac == nil {
 		coefs, err := r.Coefficients()
 		if err != nil {
@@ -274,7 +274,7 @@ func (r *chemicalReaction) FinalReaction() (string, error) {
 	return *r.finalReac, nil
 }
 
-func (r *chemicalReaction) FinalReactionNorm() (string, error) {
+func (r *ChemicalReaction) FinalReactionNorm() (string, error) {
 	if r.finalReacNorm == nil {
 		coefs, err := r.NormCoefficients()
 		if err != nil {
@@ -286,7 +286,7 @@ func (r *chemicalReaction) FinalReactionNorm() (string, error) {
 	return *r.finalReacNorm, nil
 }
 
-func (r *chemicalReaction) Masses() ([]float64, error) {
+func (r *ChemicalReaction) Masses() ([]float64, error) {
 	if r.masses == nil {
 		molars, err := r.MolarMasses()
 		if err != nil {
@@ -311,7 +311,7 @@ func (r *chemicalReaction) Masses() ([]float64, error) {
 	return *r.masses, nil
 }
 
-func (r *chemicalReaction) Output(printPrecision ...uint) (crOutput, error) {
+func (r *ChemicalReaction) Output(printPrecision ...uint) (crOutput, error) {
 	var pPrecision uint
 	if printPrecision == nil {
 		pPrecision = 4

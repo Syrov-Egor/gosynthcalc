@@ -15,13 +15,13 @@ type coeffs struct {
 }
 
 func (c *coeffs) calculateCoeffs() (MethodResult, error) {
-	user := "user"
+	user := "User"
 	switch c.mode {
 
-	case force:
+	case Force:
 		return MethodResult{Method: user, Result: c.decomposedReaction.initCoefs}, nil
 
-	case check:
+	case Check:
 		if isReactionBalanced(c.balancer.bAlgos.ReactantMatrix,
 			c.balancer.bAlgos.ProductMatrix,
 			c.decomposedReaction.initCoefs,
@@ -31,7 +31,7 @@ func (c *coeffs) calculateCoeffs() (MethodResult, error) {
 			return MethodResult{Method: user, Result: nil}, fmt.Errorf("Reaction is not balanced")
 		}
 
-	case balance:
+	case Balance:
 		coefs, err := c.balancer.Auto()
 		if err != nil {
 			return MethodResult{Method: user, Result: nil}, err
@@ -57,7 +57,7 @@ func (c *coeffs) validateCoeffs(coefs []float64) error {
 }
 
 func (c *coeffs) elementCountValidation() []string {
-	if c.mode != force {
+	if c.mode != Force {
 		r := make([]string, 0)
 		reactants := c.parsedFormulas[:c.balancer.separatorPos]
 		for _, reac := range reactants {
@@ -85,7 +85,7 @@ func (c *coeffs) elementCountValidation() []string {
 }
 
 func (c *coeffs) getCoeffs() (MethodResult, error) {
-	user := "user"
+	user := "User"
 	nilStr := MethodResult{Method: user, Result: nil}
 
 	diff := c.elementCountValidation()
