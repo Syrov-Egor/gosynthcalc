@@ -1,4 +1,4 @@
-package main
+package gosynthcalc
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
@@ -19,18 +20,22 @@ func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
 			log.Fatal(err)
 		}
 	}()
-
 	b, err := io.ReadAll(file)
+	if err != nil {
+		log.Fatal(err)
+	}
 	reactionsStr := strings.Split(string(b), "\n")
 	reactions := []ChemicalReaction{}
 	formulas := []ChemicalFormula{}
 	for _, reac := range reactionsStr {
+		if strings.TrimSpace(reac) == "" {
+			continue
+		}
 		reacO, err := NewChemicalReaction(reac)
 		if err != nil {
 			panic(err)
 		}
 		reactions = append(reactions, *reacO)
-
 		forms, err := reacO.ChemFormulas()
 		if err != nil {
 			panic(err)
@@ -40,20 +45,67 @@ func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
 	return reactions, formulas
 }
 
-var reactions, formulas = setup("data/text_mined_reactions.txt")
+func BenchmarkChemicalFormula_output(b *testing.B) {
+	_, formulas := setup("data/text_mined_reactions.txt")
 
-func BenchmarkChemincalFormula_output(b *testing.B) {
-	for _, form := range formulas {
-		out := form.Output()
-		fmt.Println(out)
+	f, err := os.Create("data/formula_output.txt")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+
+	var totalTime time.Duration
+	var calls int64
+
+	for b.Loop() {
+		for _, form := range formulas {
+			start := time.Now()
+			out := form.Output()
+			_, err := f.WriteString(out.String() + "\n")
+			totalTime += time.Since(start)
+			calls++
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	if calls > 0 {
+		avgTimeMilli := float64(totalTime.Milliseconds()) / float64(calls)
+		b.ReportMetric(avgTimeMilli, "ms/formula")
 	}
 }
 
-func BenchmarkChemincalReaction_output(b *testing.B) {
-	for i, reac := range reactions {
-		_, oerr := reac.Output()
-		if oerr != nil {
-			fmt.Println(i, reac)
+func BenchmarkChemicalReaction_output(b *testing.B) {
+	reactions, _ := setup("data/text_mined_reactions.txt")
+
+	f, err := os.Create("data/reaction_output.txt")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+
+	var totalTime time.Duration
+	var calls int64
+
+	for b.Loop() {
+		for idx, reac := range reactions {
+			start := time.Now()
+			out, oerr := reac.Output()
+			if oerr != nil {
+				b.Fatalf("Error at reaction %d: %v", idx, oerr)
+			}
+			_, err := f.WriteString(fmt.Sprintf("%s\n", out))
+			totalTime += time.Since(start)
+			calls++
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
+	}
+
+	if calls > 0 {
+		avgTimeMilli := float64(totalTime.Milliseconds()) / float64(calls)
+		b.ReportMetric(avgTimeMilli, "ms/reaction")
 	}
 }
