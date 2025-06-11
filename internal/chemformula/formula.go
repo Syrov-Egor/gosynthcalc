@@ -7,8 +7,6 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
-// TODO! "[]" formula testcase
-
 type ChemicalFormula struct {
 	formula       string
 	precision     uint
