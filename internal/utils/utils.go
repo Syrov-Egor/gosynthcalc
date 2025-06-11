@@ -2,7 +2,6 @@ package utils
 
 import (
 	"math"
-	"math/big"
 	"strings"
 )
 
@@ -48,135 +47,149 @@ func RoundFloatS(s []float64, precision uint) []float64 {
 	return res
 }
 
-type Rational struct {
-	Num, Den *big.Int
+// Simple fraction struct for the intify process
+type SimpleFraction struct {
+	Num, Den int64
 }
 
-func NewRational(f float64) *Rational {
-	if math.IsInf(f, 0) || math.IsNaN(f) {
-		return &Rational{big.NewInt(0), big.NewInt(1)}
+// Create fraction from float64 using limit_denominator approach similar to Python
+func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
+	if math.IsInf(f, 0) || math.IsNaN(f) || f == 0 {
+		return SimpleFraction{0, 1}
 	}
 
-	rat := big.NewRat(0, 1)
-	rat.SetFloat64(f)
-
-	return &Rational{
-		Num: new(big.Int).Set(rat.Num()),
-		Den: new(big.Int).Set(rat.Denom()),
-	}
-}
-
-func NewRationalWithLimit(f float64, maxDenominator int64) *Rational {
-	if math.IsInf(f, 0) || math.IsNaN(f) {
-		return &Rational{big.NewInt(0), big.NewInt(1)}
-	}
-
-	if maxDenominator <= 0 {
-		maxDenominator = 1000000
-	}
-
-	return limitDenominator(f, maxDenominator)
-}
-
-func limitDenominator(x float64, maxDen int64) *Rational {
-	if x == 0 {
-		return &Rational{big.NewInt(0), big.NewInt(1)}
-	}
-
+	// Handle negative numbers
 	sign := int64(1)
-	if x < 0 {
+	if f < 0 {
 		sign = -1
-		x = -x
+		f = -f
 	}
 
-	if x == math.Floor(x) {
-		return &Rational{big.NewInt(sign * int64(x)), big.NewInt(1)}
+	// If it's already an integer
+	if f == math.Floor(f) && f < float64(maxDenominator) {
+		return SimpleFraction{sign * int64(f), 1}
 	}
 
-	var p0, q0, p1, q1 int64 = 0, 1, 1, 0
+	// Use Python's Fraction.limit_denominator() algorithm
+	// This is simpler than the continued fraction approach
+	bestNum, bestDen := int64(0), int64(1)
+	bestError := math.Abs(f)
 
-	n := x
-	for q1 <= maxDen {
-		a := int64(math.Floor(n))
-
-		p0, q0, p1, q1 = p1, q1, p1*a+p0, q1*a+q0
-
-		if q1 > maxDen {
-			break
+	for den := int64(1); den <= maxDenominator; den++ {
+		num := int64(math.Round(f * float64(den)))
+		if num == 0 && f != 0 {
+			continue
 		}
 
-		if math.Abs(float64(p1)/float64(q1)-x) < 1e-15 {
-			break
+		error := math.Abs(f - float64(num)/float64(den))
+		if error < bestError {
+			bestError = error
+			bestNum = num
+			bestDen = den
 		}
 
-		if n == float64(a) {
-			break
-		}
-		n = 1.0 / (n - float64(a))
-
-		if math.IsInf(n, 0) || math.IsNaN(n) {
+		// If we found an exact match, stop
+		if error < 1e-15 {
 			break
 		}
 	}
 
-	if q1 > maxDen {
-		p1, q1 = p0, q0
-	}
-
-	if q1 == 0 {
-		q1 = 1
-	}
-
-	return &Rational{big.NewInt(sign * p1), big.NewInt(q1)}
+	return SimpleFraction{sign * bestNum, bestDen}
 }
 
-func (r *Rational) Simplify() {
-	gcd := new(big.Int).GCD(nil, nil, r.Num, r.Den)
-	r.Num.Div(r.Num, gcd)
-	r.Den.Div(r.Den, gcd)
-
-	if r.Den.Sign() < 0 {
-		r.Num.Neg(r.Num)
-		r.Den.Neg(r.Den)
-	}
-}
-
-func gcdBig(a, b *big.Int) *big.Int {
-	return new(big.Int).GCD(nil, nil, a, b)
-}
-
-func lcmBig(a, b *big.Int) *big.Int {
-	if a.Sign() == 0 || b.Sign() == 0 {
-		return big.NewInt(0)
-	}
-
-	gcd := gcdBig(a, b)
-	result := new(big.Int).Mul(a, b)
-	result.Div(result, gcd)
-	return new(big.Int).Abs(result)
-}
-
-func FindLCMSlice(nums []*big.Int) *big.Int {
+// Find LCM of a slice of integers
+func FindLCMSliceInt64(nums []int64) int64 {
 	if len(nums) == 0 {
-		return big.NewInt(1)
+		return 1
 	}
 
-	result := new(big.Int).Set(nums[0])
+	result := nums[0]
 	for i := 1; i < len(nums); i++ {
-		result = lcmBig(result, nums[i])
+		// Check for potential overflow before calculation
+		if willLCMOverflow(result, nums[i]) {
+			return -1
+		}
+		result = lcmInt64(result, nums[i])
 	}
 	return result
 }
 
-func FindGCDSlice(nums []*big.Int) *big.Int {
-	if len(nums) == 0 {
-		return big.NewInt(1)
+// Helper function to check if LCM calculation will overflow
+func willLCMOverflow(a, b int64) bool {
+	if a == 0 || b == 0 {
+		return false
 	}
 
-	result := new(big.Int).Set(nums[0])
+	if a > 0 && b > 0 && a > math.MaxInt64/b {
+		return true
+	}
+	if a < 0 && b < 0 && a < math.MaxInt64/b {
+		return true
+	}
+	if (a > 0 && b < 0 && -b > math.MaxInt64/a) || (a < 0 && b > 0 && -a > math.MaxInt64/b) {
+		return true
+	}
+
+	gcd := gcdInt64(a, b)
+	if gcd == 0 {
+		return false
+	}
+
+	absA := a
+	if a < 0 {
+		absA = -a
+	}
+	absB := b
+	if b < 0 {
+		absB = -b
+	}
+
+	if absA/gcd > 1e15/absB {
+		return true
+	}
+
+	return false
+}
+
+func lcmInt64(a, b int64) int64 {
+	if a == 0 || b == 0 {
+		return 0
+	}
+
+	gcd := gcdInt64(a, b)
+	result := (a / gcd) * b
+	if result < 0 {
+		result = -result
+	}
+	return result
+}
+
+func gcdInt64(a, b int64) int64 {
+	if a < 0 {
+		a = -a
+	}
+	if b < 0 {
+		b = -b
+	}
+
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+
+// Find GCD of a slice of integers
+func FindGCDSliceInt64(nums []int64) int64 {
+	if len(nums) == 0 {
+		return 1
+	}
+	result := nums[0]
+	if result < 0 {
+		result = -result
+	}
 	for i := 1; i < len(nums); i++ {
-		result = gcdBig(result, nums[i])
-		if result.Cmp(big.NewInt(1)) == 0 {
+		result = gcdInt64(result, nums[i])
+		if result == 1 {
 			break
 		}
 	}

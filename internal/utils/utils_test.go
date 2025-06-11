@@ -2,7 +2,6 @@ package utils
 
 import (
 	"math"
-	"math/big"
 	"reflect"
 	"testing"
 )
@@ -233,161 +232,197 @@ func TestRoundFloatS(t *testing.T) {
 	}
 }
 
-func TestNewRational(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    float64
-		checkNum int64
-		checkDen int64
-	}{
-		{
-			name:     "simple fraction",
-			input:    0.5,
-			checkNum: 1,
-			checkDen: 2,
-		},
-		{
-			name:     "integer",
-			input:    3.0,
-			checkNum: 3,
-			checkDen: 1,
-		},
-		{
-			name:     "negative fraction",
-			input:    -0.25,
-			checkNum: -1,
-			checkDen: 4,
-		},
-		{
-			name:     "zero",
-			input:    0.0,
-			checkNum: 0,
-			checkDen: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := NewRational(tt.input)
-			result.Simplify() // Ensure it's in simplest form
-
-			if result.Num.Int64() != tt.checkNum || result.Den.Int64() != tt.checkDen {
-				t.Errorf("NewRational(%v) = %d/%d, want %d/%d",
-					tt.input, result.Num.Int64(), result.Den.Int64(), tt.checkNum, tt.checkDen)
-			}
-		})
-	}
-}
-
-func TestNewRationalSpecialCases(t *testing.T) {
-	// Test infinity
-	result := NewRational(math.Inf(1))
-	if result.Num.Int64() != 0 || result.Den.Int64() != 1 {
-		t.Errorf("NewRational(+Inf) = %d/%d, want 0/1", result.Num.Int64(), result.Den.Int64())
-	}
-
-	// Test NaN
-	result = NewRational(math.NaN())
-	if result.Num.Int64() != 0 || result.Den.Int64() != 1 {
-		t.Errorf("NewRational(NaN) = %d/%d, want 0/1", result.Num.Int64(), result.Den.Int64())
-	}
-}
-
-func TestNewRationalWithLimit(t *testing.T) {
+func TestNewSimpleFraction(t *testing.T) {
 	tests := []struct {
 		name           string
 		input          float64
 		maxDenominator int64
-		expectSimple   bool
+		expectedNum    int64
+		expectedDen    int64
 	}{
 		{
-			name:           "simple fraction within limit",
+			name:           "simple fraction",
 			input:          0.5,
+			maxDenominator: 100,
+			expectedNum:    1,
+			expectedDen:    2,
+		},
+		{
+			name:           "integer",
+			input:          3.0,
+			maxDenominator: 100,
+			expectedNum:    3,
+			expectedDen:    1,
+		},
+		{
+			name:           "negative fraction",
+			input:          -0.25,
+			maxDenominator: 100,
+			expectedNum:    -1,
+			expectedDen:    4,
+		},
+		{
+			name:           "zero",
+			input:          0.0,
+			maxDenominator: 100,
+			expectedNum:    0,
+			expectedDen:    1,
+		},
+		{
+			name:           "one third approximation",
+			input:          0.333333,
 			maxDenominator: 10,
-			expectSimple:   true,
+			expectedNum:    1,
+			expectedDen:    3,
 		},
 		{
 			name:           "pi approximation",
 			input:          math.Pi,
-			maxDenominator: 100,
-			expectSimple:   true,
-		},
-		{
-			name:           "zero max denominator uses default",
-			input:          0.333333,
-			maxDenominator: 0,
-			expectSimple:   true,
+			maxDenominator: 10,
+			expectedNum:    22,
+			expectedDen:    7,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := NewRationalWithLimit(tt.input, tt.maxDenominator)
-			if result == nil {
-				t.Errorf("NewRationalWithLimit(%v, %d) returned nil", tt.input, tt.maxDenominator)
-			}
-			if result.Den.Int64() <= 0 {
-				t.Errorf("NewRationalWithLimit(%v, %d) has non-positive denominator", tt.input, tt.maxDenominator)
+			result := NewSimpleFraction(tt.input, tt.maxDenominator)
+			if result.Num != tt.expectedNum || result.Den != tt.expectedDen {
+				t.Errorf("NewSimpleFraction(%v, %d) = %d/%d, want %d/%d",
+					tt.input, tt.maxDenominator, result.Num, result.Den, tt.expectedNum, tt.expectedDen)
 			}
 		})
 	}
 }
 
-func TestRationalSimplify(t *testing.T) {
+func TestNewSimpleFractionSpecialCases(t *testing.T) {
+	result := NewSimpleFraction(math.Inf(1), 100)
+	if result.Num != 0 || result.Den != 1 {
+		t.Errorf("NewSimpleFraction(+Inf, 100) = %d/%d, want 0/1", result.Num, result.Den)
+	}
+
+	result = NewSimpleFraction(math.NaN(), 100)
+	if result.Num != 0 || result.Den != 1 {
+		t.Errorf("NewSimpleFraction(NaN, 100) = %d/%d, want 0/1", result.Num, result.Den)
+	}
+
+	result = NewSimpleFraction(math.Inf(-1), 100)
+	if result.Num != 0 || result.Den != 1 {
+		t.Errorf("NewSimpleFraction(-Inf, 100) = %d/%d, want 0/1", result.Num, result.Den)
+	}
+}
+
+func TestGcdInt64(t *testing.T) {
 	tests := []struct {
-		name      string
-		num       int64
-		den       int64
-		expectNum int64
-		expectDen int64
+		name     string
+		a        int64
+		b        int64
+		expected int64
 	}{
 		{
-			name:      "already simplified",
-			num:       1,
-			den:       2,
-			expectNum: 1,
-			expectDen: 2,
+			name:     "simple case",
+			a:        12,
+			b:        8,
+			expected: 4,
 		},
 		{
-			name:      "needs simplification",
-			num:       6,
-			den:       8,
-			expectNum: 3,
-			expectDen: 4,
+			name:     "coprime numbers",
+			a:        7,
+			b:        11,
+			expected: 1,
 		},
 		{
-			name:      "negative denominator",
-			num:       1,
-			den:       -2,
-			expectNum: -1,
-			expectDen: 2,
+			name:     "one is zero",
+			a:        0,
+			b:        5,
+			expected: 5,
 		},
 		{
-			name:      "both negative",
-			num:       -4,
-			den:       -6,
-			expectNum: 2,
-			expectDen: 3,
+			name:     "negative numbers",
+			a:        -12,
+			b:        8,
+			expected: 4,
+		},
+		{
+			name:     "both negative",
+			a:        -12,
+			b:        -8,
+			expected: 4,
+		},
+		{
+			name:     "same numbers",
+			a:        15,
+			b:        15,
+			expected: 15,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &Rational{
-				Num: big.NewInt(tt.num),
-				Den: big.NewInt(tt.den),
-			}
-			r.Simplify()
-
-			if r.Num.Int64() != tt.expectNum || r.Den.Int64() != tt.expectDen {
-				t.Errorf("Simplify %d/%d = %d/%d, want %d/%d",
-					tt.num, tt.den, r.Num.Int64(), r.Den.Int64(), tt.expectNum, tt.expectDen)
+			result := gcdInt64(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("gcdInt64(%d, %d) = %d, want %d", tt.a, tt.b, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestFindLCMSlice(t *testing.T) {
+func TestLcmInt64(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        int64
+		b        int64
+		expected int64
+	}{
+		{
+			name:     "simple case",
+			a:        4,
+			b:        6,
+			expected: 12,
+		},
+		{
+			name:     "coprime numbers",
+			a:        7,
+			b:        11,
+			expected: 77,
+		},
+		{
+			name:     "one is zero",
+			a:        0,
+			b:        5,
+			expected: 0,
+		},
+		{
+			name:     "negative numbers",
+			a:        -4,
+			b:        6,
+			expected: 12,
+		},
+		{
+			name:     "both negative",
+			a:        -4,
+			b:        -6,
+			expected: 12,
+		},
+		{
+			name:     "same numbers",
+			a:        15,
+			b:        15,
+			expected: 15,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := lcmInt64(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("lcmInt64(%d, %d) = %d, want %d", tt.a, tt.b, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFindLCMSliceInt64(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []int64
@@ -418,24 +453,24 @@ func TestFindLCMSlice(t *testing.T) {
 			input:    []int64{0, 5, 10},
 			expected: 0,
 		},
+		{
+			name:     "overflow case",
+			input:    []int64{1e10, 1e10},
+			expected: -1,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bigInts := make([]*big.Int, len(tt.input))
-			for i, val := range tt.input {
-				bigInts[i] = big.NewInt(val)
-			}
-
-			result := FindLCMSlice(bigInts)
-			if result.Int64() != tt.expected {
-				t.Errorf("FindLCMSlice(%v) = %d, want %d", tt.input, result.Int64(), tt.expected)
+			result := FindLCMSliceInt64(tt.input)
+			if result != tt.expected {
+				t.Errorf("FindLCMSliceInt64(%v) = %d, want %d", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestFindGCDSlice(t *testing.T) {
+func TestFindGCDSliceInt64(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []int64
@@ -466,18 +501,23 @@ func TestFindGCDSlice(t *testing.T) {
 			input:    []int64{0, 15},
 			expected: 15,
 		},
+		{
+			name:     "negative numbers",
+			input:    []int64{-12, 18, 24},
+			expected: 6,
+		},
+		{
+			name:     "all negative",
+			input:    []int64{-12, -18, -24},
+			expected: 6,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bigInts := make([]*big.Int, len(tt.input))
-			for i, val := range tt.input {
-				bigInts[i] = big.NewInt(val)
-			}
-
-			result := FindGCDSlice(bigInts)
-			if result.Int64() != tt.expected {
-				t.Errorf("FindGCDSlice(%v) = %d, want %d", tt.input, result.Int64(), tt.expected)
+			result := FindGCDSliceInt64(tt.input)
+			if result != tt.expected {
+				t.Errorf("FindGCDSliceInt64(%v) = %d, want %d", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -526,7 +566,6 @@ func TestSymmetricDifference(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := SymmetricDifference(tt.slice1, tt.slice2)
 
-			// Convert to maps for comparison since order might vary
 			resultMap := make(map[string]bool)
 			expectedMap := make(map[string]bool)
 
@@ -619,7 +658,6 @@ func TestReplaceNthOccurrence(t *testing.T) {
 			expected: "",
 		},
 		{
-
 			name:     "overlapping patterns",
 			s:        "aaaa",
 			old:      "aa",

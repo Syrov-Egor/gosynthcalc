@@ -2,7 +2,6 @@ package chemreaction
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 	"gonum.org/v1/gonum/floats"
@@ -45,68 +44,57 @@ func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 	}
 }
 
-func (b *balancer) reduceCoefficients(coeffs []float64) ([]int64, error) {
-	return reduceCoefficientsWithDenomLimit(coeffs, int64(b.maxDenom))
-}
-
-func reduceCoefficientsWithDenomLimit(coeffs []float64, maxDenominator int64) ([]int64, error) {
-	if len(coeffs) == 0 {
-		return []int64{}, nil
-	}
-
-	rationals := make([]*utils.Rational, len(coeffs))
-	for i, coeff := range coeffs {
-		rationals[i] = utils.NewRationalWithLimit(coeff, maxDenominator)
-		rationals[i].Simplify()
-	}
-
-	denominators := make([]*big.Int, len(rationals))
-	for i, rat := range rationals {
-		denominators[i] = new(big.Int).Set(rat.Den)
-	}
-
-	lcm := utils.FindLCMSlice(denominators)
-
-	intVals := make([]*big.Int, len(rationals))
-	for i, rat := range rationals {
-		quotient := new(big.Int).Div(lcm, rat.Den)
-		intVals[i] = new(big.Int).Mul(rat.Num, quotient)
-	}
-
-	gcd := utils.FindGCDSlice(intVals)
-
-	result := make([]int64, len(intVals))
-	for i, val := range intVals {
-		reduced := new(big.Int).Div(val, gcd)
-
-		if !reduced.IsInt64() {
-			return nil, fmt.Errorf("result too large for int64: coefficient %d", i)
-		}
-
-		result[i] = reduced.Int64()
-	}
-
-	return result, nil
-}
-
 func (b *balancer) intifyCoefs(coefs []float64, limit int) []float64 {
+	initialCoefficients := make([]float64, len(coefs))
+	copy(initialCoefficients, coefs)
 
-	reduced, err := b.reduceCoefficients(coefs)
-	if err != nil {
-		fmt.Println(err)
-		return coefs
+	fractions := make([]utils.SimpleFraction, len(coefs))
+	denominators := make([]int64, len(coefs))
+
+	for i, coef := range coefs {
+		fractions[i] = utils.NewSimpleFraction(coef, int64(b.maxDenom))
+		denominators[i] = fractions[i].Den
 	}
 
-	for _, coeff := range reduced {
-		if int(coeff) > limit {
-			fmt.Println(coeff)
-			return coefs
+	lcm := utils.FindLCMSliceInt64(denominators)
+	if lcm < 0 || lcm > 1e15 {
+		return initialCoefficients
+	}
+
+	vals := make([]int64, len(fractions))
+	for i, frac := range fractions {
+		if frac.Den == 0 {
+			return initialCoefficients
+		}
+		vals[i] = frac.Num * (lcm / frac.Den)
+
+		if vals[i] < 0 && frac.Num > 0 {
+			return initialCoefficients
 		}
 	}
 
-	result := make([]float64, len(reduced))
-	for i, r := range reduced {
-		result[i] = float64(r)
+	gcd := utils.FindGCDSliceInt64(vals)
+	if gcd == 0 {
+		return initialCoefficients
+	}
+
+	coefficients := make([]int64, len(vals))
+	for i, val := range vals {
+		coefficients[i] = val / gcd
+	}
+
+	for _, coeff := range coefficients {
+		if coeff < 0 {
+			coeff = -coeff
+		}
+		if int(coeff) > limit {
+			return initialCoefficients
+		}
+	}
+
+	result := make([]float64, len(coefficients))
+	for i, coeff := range coefficients {
+		result[i] = float64(coeff)
 	}
 
 	return result
