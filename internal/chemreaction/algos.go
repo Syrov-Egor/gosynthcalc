@@ -116,6 +116,12 @@ func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
 		augumentedMatrix = cleanMatrix
 	}
 
+	aRows, aCols := augumentedMatrix.Dims()
+
+	if aRows != aCols {
+		return nil, fmt.Errorf("Singular matrix")
+	}
+
 	var inversedMatrix mat.Dense
 
 	err = inversedMatrix.Inverse(augumentedMatrix)
