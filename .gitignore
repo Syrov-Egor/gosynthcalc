@@ -10,6 +10,8 @@
 
 main.go
 gosynthcalc
+formula_output.txt
+reaction_output.txt
 
 # Test binary, built with `go test -c`
 *.test
