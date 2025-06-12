@@ -40,25 +40,13 @@ func (m Mode) String() string {
 	return [...]string{"Force", "Check", "Balance"}[m]
 }
 
-/*
-defaults are
-
-	ReacOptions{
-					mode:       Balance,
-					target:     0,
-					targerMass: 1.0,
-					intify:     true,
-					precision:  8,
-					tolerance:  1e-8,
-				}
-*/
 type ReacOptions struct {
-	mode       Mode
-	target     int
-	targerMass float64
-	intify     bool
-	precision  uint
-	tolerance  float64
+	Rmode      Mode
+	Target     int
+	TargerMass float64
+	Intify     bool
+	Precision  uint
+	Tolerance  float64
 }
 
 func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReaction, error) {
@@ -72,12 +60,12 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReac
 	var reacOpt ReacOptions
 	if options == nil {
 		reacOpt = ReacOptions{
-			mode:       Balance,
-			target:     0,
-			targerMass: 1.0,
-			intify:     true,
-			precision:  8,
-			tolerance:  1e-8,
+			Rmode:      Balance,
+			Target:     0,
+			TargerMass: 1.0,
+			Intify:     true,
+			Precision:  8,
+			Tolerance:  1e-8,
 		}
 	} else {
 		reacOpt = options[0]
@@ -93,12 +81,12 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReac
 func (r *ChemicalReaction) calculatedTarget() (int, error) {
 	high := len(r.decomposer.products) - 1
 	low := -len(r.decomposer.reactants)
-	if r.reacOpts.target <= high && r.reacOpts.target >= low {
-		return r.reacOpts.target - low, nil
+	if r.reacOpts.Target <= high && r.reacOpts.Target >= low {
+		return r.reacOpts.Target - low, nil
 	}
 	return -1, fmt.Errorf(
 		"The target integer %d should be in range %d : %d",
-		r.reacOpts.target,
+		r.reacOpts.Target,
 		low,
 		high,
 	)
@@ -172,9 +160,9 @@ func (r *ChemicalReaction) Balancer() (*balancer, error) {
 		bal := newBalancer(
 			mat,
 			r.decomposer.separatorPos,
-			r.reacOpts.intify,
-			r.reacOpts.precision,
-			r.reacOpts.tolerance)
+			r.reacOpts.Intify,
+			r.reacOpts.Precision,
+			r.reacOpts.Tolerance)
 		r.balancer = bal
 	}
 	return r.balancer, nil
@@ -191,7 +179,7 @@ func (r *ChemicalReaction) Coefficients() (*MethodResult, error) {
 			return nil, err
 		}
 		coeffs := coeffs{
-			mode:               r.reacOpts.mode,
+			mode:               r.reacOpts.Rmode,
 			parsedFormulas:     parsed,
 			decomposedReaction: r.decomposer,
 			balancer:           bal,
@@ -221,7 +209,7 @@ func (r *ChemicalReaction) NormCoefficients() ([]float64, error) {
 			norm[i] = coef / targetCompound
 		}
 
-		norm = utils.RoundFloatS(norm, r.reacOpts.precision)
+		norm = utils.RoundFloatS(norm, r.reacOpts.Precision)
 		r.normCoefs = &norm
 	}
 	return *r.normCoefs, nil
@@ -234,7 +222,7 @@ func (r *ChemicalReaction) IsBalanced() bool {
 		bal.bAlgos.ReactantMatrix,
 		bal.bAlgos.ProductMatrix,
 		coefs.Result,
-		r.reacOpts.tolerance,
+		r.reacOpts.Tolerance,
 	)
 }
 
@@ -300,10 +288,10 @@ func (r *ChemicalReaction) Masses() ([]float64, error) {
 		if err != nil {
 			return nil, err
 		}
-		nu := r.reacOpts.targerMass / molars[target]
+		nu := r.reacOpts.TargerMass / molars[target]
 		masses := make([]float64, len(molars))
 		for i, molar := range molars {
-			masses[i] = utils.RoundFloat(molar*nu*normCoefs[i], r.reacOpts.precision)
+			masses[i] = utils.RoundFloat(molar*nu*normCoefs[i], r.reacOpts.Precision)
 		}
 
 		r.masses = &masses
@@ -356,7 +344,7 @@ func (r *ChemicalReaction) Output(printPrecision ...uint) (crOutput, error) {
 	crO := crOutput{
 		Reaction:          r.reaction,
 		Matrix:            fmt.Sprintf("%v", matrix),
-		Mode:              r.reacOpts.mode.String(),
+		Mode:              r.reacOpts.Rmode.String(),
 		Formulas:          r.decomposer.compounds,
 		Coefficients:      coefs.Result,
 		NormCoefficients:  ncoefs,

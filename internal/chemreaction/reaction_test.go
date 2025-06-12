@@ -41,12 +41,12 @@ CO2    M = 44.009   g/mol  m = 0.3295  g`
 func TestChemicalReaction_forceMode(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
 	reacOpts := ReacOptions{
-		mode:       Force,
-		target:     0,
-		targerMass: 1.0,
-		intify:     true,
-		precision:  8,
-		tolerance:  1e-8,
+		Rmode:      Force,
+		Target:     0,
+		TargerMass: 1.0,
+		Intify:     true,
+		Precision:  8,
+		Tolerance:  1e-8,
 	}
 	reac, _ := NewChemicalReaction(reactionStr, reacOpts)
 	got := reac.decomposer.initCoefs
@@ -59,12 +59,12 @@ func TestChemicalReaction_forceMode(t *testing.T) {
 func TestChemicalReaction_checkModeRight(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+3Br2+16NaOH=6NaBr+2Na2CrO4+3Na2SO4+8H2O"
 	reacOpts := ReacOptions{
-		mode:       Check,
-		target:     0,
-		targerMass: 1.0,
-		intify:     true,
-		precision:  8,
-		tolerance:  1e-8,
+		Rmode:      Check,
+		Target:     0,
+		TargerMass: 1.0,
+		Intify:     true,
+		Precision:  8,
+		Tolerance:  1e-8,
 	}
 	reac, _ := NewChemicalReaction(reactionStr, reacOpts)
 	got, _ := reac.Coefficients()
@@ -77,12 +77,12 @@ func TestChemicalReaction_checkModeRight(t *testing.T) {
 func TestChemicalReaction_checkModeWrong(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
 	reacOpts := ReacOptions{
-		mode:       Check,
-		target:     0,
-		targerMass: 1.0,
-		intify:     true,
-		precision:  8,
-		tolerance:  1e-8,
+		Rmode:      Check,
+		Target:     0,
+		TargerMass: 1.0,
+		Intify:     true,
+		Precision:  8,
+		Tolerance:  1e-8,
 	}
 	reac, _ := NewChemicalReaction(reactionStr, reacOpts)
 	_, err := reac.Coefficients()
