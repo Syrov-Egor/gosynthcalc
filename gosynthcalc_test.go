@@ -109,3 +109,29 @@ func BenchmarkChemicalReaction_output(b *testing.B) {
 		b.ReportMetric(avgTimeMilli, "ms/reaction")
 	}
 }
+
+func ExampleNewChemicalFormula() {
+	formula, err := NewChemicalFormula("H2O")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	molarMass := formula.MolarMass()
+	fmt.Printf("%v", molarMass)
+	// Output: 18.015
+}
+
+func ExampleNewChemicalReaction() {
+	reaction, err := NewChemicalReaction("FeCl3+SO2+H2O=FeCl2+H2SO4+HCl")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	coefs, err := reaction.Coefficients()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	fmt.Printf("%v", coefs.Result)
+	// Output: [2 1 2 2 1 2]
+}
