@@ -1,6 +1,6 @@
 # gosynthcalc
 <p align="center">
-    <img src="data/Gopher_flask.svg" width="200" height="200">
+    <img src="data/Gopher_flask.svg" width="300" height="300">
 </p>
 
 Go library for calculating the masses of substances required for chemical synthesis directly from the reaction string. It includes solutions for all intermediate steps, including chemical formula parsing, molar mass calculation and reaction balancing with different matrix methods. This is a Go rewrite of [chemsynthcalc](https://github.com/Syrov-Egor/chemsynthcalc).
@@ -126,6 +126,8 @@ fmt.Println(coefs.Result)
 
 ## License
 The code is provided under the MIT license.
+The Go gopher was designed by [Renee French](http://reneefrench.blogspot.com/).
+[gopher.svg](https://github.com/golang-samples/gopher-vector) was created by [Takuya Ueda](https://twitter.com/tenntenn).
 
 ## Contact
 If you have any questions, please contact **Egor Syrov** at syrov_ev@mail.ru or
