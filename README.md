@@ -3,13 +3,13 @@
     <img src="data/Gopher_flask.svg" width="200" height="200">
 </p>
 
-Go library for calculating the masses of substances required for chemical synthesis directly from the reaction string. It includes solutions for all intermediate steps, including chemical formula parsing, molar mass calculation and reaction balancing with different matrix methods. This is a Go rewrite of [chemsynthcalc](https:github.com/Syrov-Egor/chemsynthcalc).
+Go library for calculating the masses of substances required for chemical synthesis directly from the reaction string. It includes solutions for all intermediate steps, including chemical formula parsing, molar mass calculation and reaction balancing with different matrix methods. This is a Go rewrite of [chemsynthcalc](https://github.com/Syrov-Egor/chemsynthcalc).
 
 ## Documentation
-Detailed docs are presented for [Python version](https:syrov-egor.github.io/chemsynthcalc/). I tried to remain the structure of the project and object names are close to the Python version as possible.
+Detailed docs are presented for [Python version](https://syrov-egor.github.io/chemsynthcalc/). I tried to remain the structure of the project and object names are close to the Python version as possible.
 
 ## Example use
-Let's say that we need to prepare 3 grams of [YBCO](https:en.wikipedia.org/wiki/Yttrium_barium_copper_oxide) by solid-state synthesis from respective carbonates. The reaction string will look something like this (to simplify, let's leave it without oxygen nonstoichiometry):
+Let's say that we need to prepare 3 grams of [YBCO](https://en.wikipedia.org/wiki/Yttrium_barium_copper_oxide) by solid-state synthesis from respective carbonates. The reaction string will look something like this (to simplify, let's leave it without oxygen nonstoichiometry):
 ```Go
 import "github.com/Syrov-Egor/gosynthcalc/"
 
@@ -129,4 +129,4 @@ The code is provided under the MIT license.
 
 ## Contact
 If you have any questions, please contact **Egor Syrov** at syrov_ev@mail.ru or
-create an issue at github https:github.com/Syrov-Egor/chemsynthcalc/issues.
+create an issue at github https://github.com/Syrov-Egor/chemsynthcalc/issues.
