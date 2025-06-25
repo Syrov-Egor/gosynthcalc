@@ -126,3 +126,43 @@ func TestChemicalReaction_countValidationBoth(t *testing.T) {
 			err)
 	}
 }
+
+func TestChemicalReaction_setCoefficientsWronglen(t *testing.T) {
+	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
+	reac, _ := NewChemicalReaction(reactionStr)
+	coefs := []float64{2, 5, 6, 1, 2, 4}
+	err := reac.SetCoefficients(coefs)
+	expected := "Lenght of coefficient slice should be 7, got 6"
+	if err.Error() != expected {
+		t.Errorf("this test should give error %s, got %s instead",
+			expected,
+			err)
+	}
+}
+
+func TestChemicalReaction_setCoefficientsNegative(t *testing.T) {
+	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
+	reac, _ := NewChemicalReaction(reactionStr)
+	coefs := []float64{2, 5, 6, 1, 2, 4, -2}
+	err := reac.SetCoefficients(coefs)
+	expected := "Input coefficient -2.000000 at position 6 is <= 0"
+	if err.Error() != expected {
+		t.Errorf("this test should give error %s, got %s instead",
+			expected,
+			err)
+	}
+}
+
+func TestChemicalReaction_setCoefficientsRight(t *testing.T) {
+	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
+	reac, _ := NewChemicalReaction(reactionStr)
+	coefs := []float64{2, 5, 6, 1, 2, 4, 2}
+	reac.SetCoefficients(coefs)
+	reac_coefs, _ := reac.Coefficients()
+	expected := []float64{2, 5, 6, 1, 2, 4, 2}
+	if !slices.Equal(reac_coefs.Result, expected) {
+		t.Errorf("this test should give %v, got %v instead",
+			expected,
+			reac_coefs.Result)
+	}
+}

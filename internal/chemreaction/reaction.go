@@ -193,6 +193,21 @@ func (r *ChemicalReaction) Coefficients() (*MethodResult, error) {
 	return r.coefs, nil
 }
 
+func (r *ChemicalReaction) SetCoefficients(coefs []float64) error {
+	if len(coefs) != len(r.decomposer.compounds) {
+		return fmt.Errorf("Lenght of coefficient slice should be %d, got %d", len(r.decomposer.compounds), len(coefs))
+	}
+	for i, coef := range coefs {
+		if coef <= 0 {
+			return fmt.Errorf("Input coefficient %f at position %d is <= 0", coef, i)
+		}
+	}
+
+	r.coefs = &MethodResult{Method: "User", Result: coefs}
+
+	return nil
+}
+
 func (r *ChemicalReaction) NormCoefficients() ([]float64, error) {
 	if r.normCoefs == nil {
 		coefs, err := r.Coefficients()
