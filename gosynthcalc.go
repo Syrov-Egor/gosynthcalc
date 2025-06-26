@@ -117,6 +117,8 @@ const (
 	Balance ReactionMode = chemreaction.Balance
 )
 
+type MethodResult = chemreaction.MethodResult
+
 // Builder function to create [ChemicalFormula] object.
 func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, error) {
 	return chemformula.NewChemicalFormula(formula, precision...)
