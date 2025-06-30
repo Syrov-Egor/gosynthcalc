@@ -28,7 +28,7 @@ func (c *coeffs) calculateCoeffs() (MethodResult, error) {
 			c.balancer.tolerance) {
 			return MethodResult{Method: user, Result: c.decomposedReaction.initCoefs}, nil
 		} else {
-			return MethodResult{Method: user, Result: nil}, fmt.Errorf("Reaction is not balanced")
+			return MethodResult{Method: user, Result: nil}, fmt.Errorf("reaction is not balanced")
 		}
 
 	case Balance:
@@ -39,7 +39,7 @@ func (c *coeffs) calculateCoeffs() (MethodResult, error) {
 		return coefs, nil
 
 	default:
-		return MethodResult{Method: user, Result: nil}, fmt.Errorf("No such mode %d", c.mode)
+		return MethodResult{Method: user, Result: nil}, fmt.Errorf("no such mode %d", c.mode)
 	}
 }
 
@@ -48,9 +48,9 @@ func (c *coeffs) validateCoeffs(coefs []float64) error {
 
 	switch {
 	case !allPositive(coefs):
-		return fmt.Errorf("Some coefs in %v are negative or 0", coefs)
+		return fmt.Errorf("some coefs in %v are negative or 0", coefs)
 	case len(coefs) != cols:
-		return fmt.Errorf("Number of coefs should be equal %d, got %d", cols, len(coefs))
+		return fmt.Errorf("number of coefs should be equal %d, got %d", cols, len(coefs))
 	default:
 		return nil
 	}
@@ -91,7 +91,7 @@ func (c *coeffs) getCoeffs() (MethodResult, error) {
 	diff := c.elementCountValidation()
 	if diff != nil {
 		return nilStr,
-			fmt.Errorf("Cannot balance this reaction, because element(s) %v are only in one part of the reaction", diff)
+			fmt.Errorf("cannot balance this reaction, because element(s) %v are only in one part of the reaction", diff)
 	}
 	coeffs, err := c.calculateCoeffs()
 	if err != nil {

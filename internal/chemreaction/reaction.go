@@ -12,6 +12,8 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+//TODO: H2+O2=H2O PPinv testcase
+
 type ChemicalReaction struct {
 	reaction       string
 	reacOpts       ReacOptions
@@ -85,7 +87,7 @@ func (r *ChemicalReaction) calculatedTarget() (int, error) {
 		return r.reacOpts.Target - low, nil
 	}
 	return -1, fmt.Errorf(
-		"The target integer %d should be in range %d : %d",
+		"the target integer %d should be in range %d : %d",
 		r.reacOpts.Target,
 		low,
 		high,
@@ -195,11 +197,11 @@ func (r *ChemicalReaction) Coefficients() (*MethodResult, error) {
 
 func (r *ChemicalReaction) SetCoefficients(coefs []float64) error {
 	if len(coefs) != len(r.decomposer.compounds) {
-		return fmt.Errorf("Lenght of coefficient slice should be %d, got %d", len(r.decomposer.compounds), len(coefs))
+		return fmt.Errorf("lenght of coefficient slice should be %d, got %d", len(r.decomposer.compounds), len(coefs))
 	}
 	for i, coef := range coefs {
 		if coef <= 0 {
-			return fmt.Errorf("Input coefficient %f at position %d is <= 0", coef, i)
+			return fmt.Errorf("input coefficient %f at position %d is <= 0", coef, i)
 		}
 	}
 

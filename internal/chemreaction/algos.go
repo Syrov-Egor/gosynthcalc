@@ -119,7 +119,7 @@ func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
 	aRows, aCols := augumentedMatrix.Dims()
 
 	if aRows != aCols {
-		return nil, fmt.Errorf("Singular matrix")
+		return nil, fmt.Errorf("singular matrix")
 	}
 
 	var inversedMatrix mat.Dense
@@ -200,7 +200,7 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 
 	mpInverse, err := computePseudoinverse(b.ReactantMatrix, b.Tolerance)
 	if err != nil {
-		return nil, fmt.Errorf("Error computing pseudoinverse of reactant matrix: %s", err)
+		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %s", err)
 	}
 
 	identity := mat.NewDense(reactantRows, reactantRows, nil)
@@ -217,7 +217,7 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 
 	gPinv, err := computePseudoinverse(&gMatrix, b.Tolerance)
 	if err != nil {
-		return nil, fmt.Errorf("Error computing pseudoinverse of reactant matrix: %s", err)
+		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %s", err)
 	}
 
 	var gPinvG mat.Dense

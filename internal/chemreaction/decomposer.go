@@ -49,7 +49,7 @@ type reactionDecomposer struct {
 
 func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 	if reaction == "" {
-		return nil, fmt.Errorf("Empty reaction string")
+		return nil, fmt.Errorf("empty reaction string")
 	}
 
 	separator := extractSeparator(reaction)
@@ -87,7 +87,7 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 
 func extractSeparator(reaction string) string {
 	for _, sep := range reactionRegexes.reactionSeparators {
-		if strings.Index(reaction, sep) != -1 {
+		if strings.Contains(reaction, sep) {
 			splitted := strings.Split(reaction, sep)
 			if splitted[0] != "" && splitted[1] != "" {
 				return sep

@@ -111,16 +111,13 @@ func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coe
 	mulAndSumFl(reactantMatrix, reactantCoefs, reacSum, reactantRows, reactantCols)
 	mulAndSumFl(productMatrix, productCoefs, prodSum, productRows, productCols)
 
-	if floats.EqualApprox(reacSum, prodSum, atol) {
-		return true
-	}
-	return false
+	return floats.EqualApprox(reacSum, prodSum, atol)
 }
 
 func (b *balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64, error) {
 	var coefficients []float64
 	var err error
-	errm := fmt.Errorf("Can't balance reaction by %s method", method)
+	errm := fmt.Errorf("can't balance reaction by %s method", method)
 
 	switch method {
 	case "inv":
@@ -144,7 +141,7 @@ func (b *balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64,
 			return nil, errm
 		}
 	default:
-		return nil, fmt.Errorf("No method %s", method)
+		return nil, fmt.Errorf("no method %s", method)
 	}
 	coefficients = utils.RoundFloatS(coefficients, b.precision+2)
 	_, matrLength := b.reactionMatrix.Dims()
@@ -163,7 +160,7 @@ func (b *balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64,
 		return coefficients, nil
 	}
 
-	return nil, fmt.Errorf("Wrong coefficients")
+	return nil, fmt.Errorf("wrong coefficients")
 }
 
 func (b *balancer) Inv() ([]float64, error) {
@@ -216,7 +213,7 @@ func (b *balancer) Auto() (MethodResult, error) {
 	}
 
 	return MethodResult{Method: "", Result: nil},
-		fmt.Errorf("Can't balance this reaction by any method")
+		fmt.Errorf("can't balance this reaction by any method")
 }
 
 func mulAndSumFl(matrix *mat.Dense, vector []float64, result []float64, rows int, cols int) {
