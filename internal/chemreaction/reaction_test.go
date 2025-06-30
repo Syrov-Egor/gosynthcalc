@@ -86,7 +86,7 @@ func TestChemicalReaction_checkModeWrong(t *testing.T) {
 	}
 	reac, _ := NewChemicalReaction(reactionStr, reacOpts)
 	_, err := reac.Coefficients()
-	if err.Error() != "Reaction is not balanced" {
+	if err.Error() != "reaction is not balanced" {
 		t.Errorf("this test should give error %s, got %s instead", "Reaction is not balanced", err)
 	}
 }
@@ -95,7 +95,7 @@ func TestChemicalReaction_countValidationLeft(t *testing.T) {
 	reactionStr := "Rb2CO3+La2O3+Nb2O5=RbLaNb2O7"
 	reac, _ := NewChemicalReaction(reactionStr)
 	_, err := reac.Coefficients()
-	expected := "Cannot balance this reaction, because element(s) [C] are only in one part of the reaction"
+	expected := "cannot balance this reaction, because element(s) [C] are only in one part of the reaction"
 	if err.Error() != expected {
 		t.Errorf("this test should give error %s, got %s instead",
 			expected,
@@ -107,7 +107,7 @@ func TestChemicalReaction_countValidationRight(t *testing.T) {
 	reactionStr := "Rb2CO3+La2O3+Nb2O5=RbLaNb2O7+CO2+Nd"
 	reac, _ := NewChemicalReaction(reactionStr)
 	_, err := reac.Coefficients()
-	expected := "Cannot balance this reaction, because element(s) [Nd] are only in one part of the reaction"
+	expected := "cannot balance this reaction, because element(s) [Nd] are only in one part of the reaction"
 	if err.Error() != expected {
 		t.Errorf("this test should give error %s, got %s instead",
 			expected,
@@ -119,7 +119,7 @@ func TestChemicalReaction_countValidationBoth(t *testing.T) {
 	reactionStr := "Rb2CO3+La2O3+Nb2O5=RbLaNb2O7+Nd"
 	reac, _ := NewChemicalReaction(reactionStr)
 	_, err := reac.Coefficients()
-	expected := "Cannot balance this reaction, because element(s) [C Nd] are only in one part of the reaction"
+	expected := "cannot balance this reaction, because element(s) [C Nd] are only in one part of the reaction"
 	if err.Error() != expected {
 		t.Errorf("this test should give error %s, got %s instead",
 			expected,
@@ -132,7 +132,7 @@ func TestChemicalReaction_setCoefficientsWronglen(t *testing.T) {
 	reac, _ := NewChemicalReaction(reactionStr)
 	coefs := []float64{2, 5, 6, 1, 2, 4}
 	err := reac.SetCoefficients(coefs)
-	expected := "Lenght of coefficient slice should be 7, got 6"
+	expected := "lenght of coefficient slice should be 7, got 6"
 	if err.Error() != expected {
 		t.Errorf("this test should give error %s, got %s instead",
 			expected,
@@ -145,7 +145,7 @@ func TestChemicalReaction_setCoefficientsNegative(t *testing.T) {
 	reac, _ := NewChemicalReaction(reactionStr)
 	coefs := []float64{2, 5, 6, 1, 2, 4, -2}
 	err := reac.SetCoefficients(coefs)
-	expected := "Input coefficient -2.000000 at position 6 is <= 0"
+	expected := "input coefficient -2.000000 at position 6 is <= 0"
 	if err.Error() != expected {
 		t.Errorf("this test should give error %s, got %s instead",
 			expected,

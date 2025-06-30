@@ -12,8 +12,6 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-//TODO: H2+O2=H2O PPinv testcase
-
 type ChemicalReaction struct {
 	reaction       string
 	reacOpts       ReacOptions
