@@ -39,7 +39,7 @@ func (v reactionValidator) validate() (*reactionDecomposer, error) {
 		err = fmt.Errorf("there are invalid character(s) %s in the reaction '%s'",
 			v.invalidCharacters(), v.reaction)
 	case v.noRPSeparator(*decomp):
-		err = fmt.Errorf("no separator between reactants and products: %s in the reaction '%s",
+		err = fmt.Errorf("no separator between reactants and products: %s in the reaction', %s",
 			reactionRegexes.reactionSeparators, v.reaction)
 	case v.noReacSeparator():
 		err = fmt.Errorf("no separators between compounds: %s in the reaction '%s",

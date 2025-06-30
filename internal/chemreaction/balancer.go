@@ -165,7 +165,7 @@ func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef
 }
 
 func (b *balancer) Inv() ([]float64, error) {
-	res, err := b.calculateByMethod(nil, "inv")
+	res, err := b.calculateByMethod(context.Background(), "inv")
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (b *balancer) Inv() ([]float64, error) {
 }
 
 func (b *balancer) GPinv() ([]float64, error) {
-	res, err := b.calculateByMethod(nil, "gpinv")
+	res, err := b.calculateByMethod(context.Background(), "gpinv")
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (b *balancer) GPinv() ([]float64, error) {
 }
 
 func (b *balancer) PPinv() ([]float64, error) {
-	res, err := b.calculateByMethod(nil, "ppinv")
+	res, err := b.calculateByMethod(context.Background(), "ppinv")
 	if err != nil {
 		return nil, err
 	}
