@@ -1,6 +1,7 @@
 package chemreaction
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
@@ -114,7 +115,7 @@ func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coe
 	return floats.EqualApprox(reacSum, prodSum, atol)
 }
 
-func (b *balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64, error) {
+func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef ...uint) ([]float64, error) {
 	var coefficients []float64
 	var err error
 	errm := fmt.Errorf("can't balance reaction by %s method", method)
@@ -136,7 +137,7 @@ func (b *balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64,
 			return nil, errm
 		}
 	case "comb":
-		coefficients = b.bAlgos.combinatorial(maxCoef[0])
+		coefficients = b.bAlgos.combinatorial(ctx, maxCoef[0])
 		if coefficients == nil {
 			return nil, errm
 		}
@@ -164,7 +165,7 @@ func (b *balancer) calculateByMethod(method string, maxCoef ...uint) ([]float64,
 }
 
 func (b *balancer) Inv() ([]float64, error) {
-	res, err := b.calculateByMethod("inv")
+	res, err := b.calculateByMethod(nil, "inv")
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +173,7 @@ func (b *balancer) Inv() ([]float64, error) {
 }
 
 func (b *balancer) GPinv() ([]float64, error) {
-	res, err := b.calculateByMethod("gpinv")
+	res, err := b.calculateByMethod(nil, "gpinv")
 	if err != nil {
 		return nil, err
 	}
@@ -180,15 +181,15 @@ func (b *balancer) GPinv() ([]float64, error) {
 }
 
 func (b *balancer) PPinv() ([]float64, error) {
-	res, err := b.calculateByMethod("ppinv")
+	res, err := b.calculateByMethod(nil, "ppinv")
 	if err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
-func (b *balancer) Comb(maxCoef uint) ([]float64, error) {
-	res, err := b.calculateByMethod("comb", maxCoef)
+func (b *balancer) Comb(ctx context.Context, maxCoef uint) ([]float64, error) {
+	res, err := b.calculateByMethod(ctx, "comb", maxCoef)
 	if err != nil {
 		return nil, err
 	}

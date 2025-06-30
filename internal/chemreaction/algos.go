@@ -1,6 +1,7 @@
 package chemreaction
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"runtime"
@@ -283,12 +284,12 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	return coefs, nil
 }
 
-func (b *balancingAlgos) combinatorial(maxCoef uint) []float64 {
+func (b *balancingAlgos) combinatorial(ctx context.Context, maxCoef uint) []float64 {
 	iMaxCoef := int(maxCoef)
 	_, cols := b.ReactionMatrix.Dims()
 	numWorkers := runtime.GOMAXPROCS(0)
 	gen := newMultiCombinationGenerator(iMaxCoef, cols)
-	combinations := gen.generate(numWorkers)
+	combinations := gen.generate(ctx, numWorkers)
 
 	resultChan := make(chan []int, 1)
 	var activeWorkers int32
@@ -301,47 +302,63 @@ func (b *balancingAlgos) combinatorial(maxCoef uint) []float64 {
 			reacSum := make([]float64, b.ReactantRows)
 			prodSum := make([]float64, b.ProductRows)
 
-			for arr := range combinations {
+			for {
 				select {
-				case result := <-resultChan:
-					resultChan <- result
+				case <-ctx.Done(): // Handle cancellation
 					return
-				default:
-				}
+				case arr, ok := <-combinations:
+					if !ok {
+						return
+					}
+					for arr = range combinations {
+						select {
+						case result := <-resultChan:
+							resultChan <- result
+							return
+						default:
+						}
 
-				atomic.AddInt32(&activeWorkers, 1)
+						atomic.AddInt32(&activeWorkers, 1)
 
-				reactantCoefs := arr[:b.SeparatorPos]
-				productCoefs := arr[b.SeparatorPos:]
+						reactantCoefs := arr[:b.SeparatorPos]
+						productCoefs := arr[b.SeparatorPos:]
 
-				mulAndSum(b.ReactantMatrix, reactantCoefs, reacSum, b.ReactantRows, b.ReactantCols)
-				mulAndSum(b.ProductMatrix, productCoefs, prodSum, b.ProductRows, b.ProductCols)
+						mulAndSum(b.ReactantMatrix, reactantCoefs, reacSum, b.ReactantRows, b.ReactantCols)
+						mulAndSum(b.ProductMatrix, productCoefs, prodSum, b.ProductRows, b.ProductCols)
 
-				if floats.EqualApprox(reacSum, prodSum, b.Tolerance) {
-					solution := arr
-					select {
-					case resultChan <- solution:
-					default:
+						if floats.EqualApprox(reacSum, prodSum, b.Tolerance) {
+							solution := arr
+							select {
+							case resultChan <- solution:
+							default:
+							}
+						}
+						atomic.AddInt32(&activeWorkers, -1)
 					}
 				}
-				atomic.AddInt32(&activeWorkers, -1)
 			}
 		}()
 	}
+
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
-	result, ok := <-resultChan
-	if !ok {
+
+	select {
+	case <-ctx.Done():
 		return nil
+	case result, ok := <-resultChan:
+		if !ok {
+			return nil
+		}
+		fmt.Println()
+		toFloat := make([]float64, len(result))
+		for i, r := range result {
+			toFloat[i] = float64(r)
+		}
+		return toFloat
 	}
-	fmt.Println()
-	toFloat := make([]float64, len(result))
-	for i, r := range result {
-		toFloat[i] = float64(r)
-	}
-	return toFloat
 }
 
 func mulAndSum(matrix *mat.Dense, vector []int, result []float64, rows int, cols int) {

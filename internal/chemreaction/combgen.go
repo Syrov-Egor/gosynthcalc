@@ -1,6 +1,7 @@
 package chemreaction
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"sync"
@@ -18,13 +19,12 @@ func newMultiCombinationGenerator(maxCoef, k int) *multiCombinationGenerator {
 	}
 }
 
-func (m *multiCombinationGenerator) generate(numWorkers int) <-chan []int {
+func (m *multiCombinationGenerator) generate(ctx context.Context, numWorkers int) <-chan []int {
 	if numWorkers <= 0 {
 		numWorkers = runtime.GOMAXPROCS(0)
 	}
 
 	out := make(chan []int, numWorkers*32)
-
 	sem := make(chan struct{}, numWorkers)
 	var wg sync.WaitGroup
 
@@ -32,25 +32,52 @@ func (m *multiCombinationGenerator) generate(numWorkers int) <-chan []int {
 		defer close(out)
 
 		for maxValue := 1; maxValue <= m.maxCoef; maxValue++ {
+			// Check for cancellation
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			fmt.Printf("\r\033[2KProcessing coef %d of %d", maxValue, m.maxCoef)
 			taskCount := maxValue
 			workQueue := make(chan int, taskCount)
 
 			for i := 1; i <= maxValue; i++ {
-				workQueue <- i
+				select {
+				case workQueue <- i:
+				case <-ctx.Done():
+					close(workQueue)
+					return
+				}
 			}
 			close(workQueue)
+
 			var maxValueWg sync.WaitGroup
 			maxValueWg.Add(taskCount)
 
-			for range numWorkers {
+			for i := 0; i < numWorkers; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
 
 					for startingValue := range workQueue {
-						sem <- struct{}{}
-						generateCombinations(startingValue, maxValue, m.k, out)
+						// Check for cancellation
+						select {
+						case <-ctx.Done():
+							maxValueWg.Done()
+							return
+						default:
+						}
+
+						select {
+						case sem <- struct{}{}:
+						case <-ctx.Done():
+							maxValueWg.Done()
+							return
+						}
+
+						generateCombinations(ctx, startingValue, maxValue, m.k, out)
 						<-sem
 						maxValueWg.Done()
 					}
@@ -64,7 +91,7 @@ func (m *multiCombinationGenerator) generate(numWorkers int) <-chan []int {
 	return out
 }
 
-func generateCombinations(startingValue, maxVal, k int, out chan<- []int) {
+func generateCombinations(ctx context.Context, startingValue, maxVal, k int, out chan<- []int) {
 	current := make([]int, k)
 	current[0] = startingValue
 
@@ -73,9 +100,23 @@ func generateCombinations(startingValue, maxVal, k int, out chan<- []int) {
 	}
 
 	for {
+		// Check for cancellation before processing
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		result := make([]int, k)
 		copy(result, current)
-		out <- result
+
+		// Send combination with cancellation support
+		select {
+		case out <- result:
+		case <-ctx.Done():
+			return
+		}
+
 		j := k - 1
 		for j >= 0 && current[j] == maxVal {
 			j--

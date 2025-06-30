@@ -83,7 +83,7 @@ func TestBalancer_Comb(t *testing.T) {
 		t.Logf("%v", reaction.reaction)
 		reac, _ := NewChemicalReaction(reaction.reaction)
 		bal, _ := reac.Balancer()
-		inv, _ := bal.Comb(10)
+		inv, _ := bal.Comb(nil, 10)
 		if !slices.Equal(inv, reaction.coefs) {
 			t.Errorf("Comb() method fault for reaction %v: expected %v, got %v",
 				reaction.reaction,
