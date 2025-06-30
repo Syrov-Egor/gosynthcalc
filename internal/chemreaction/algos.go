@@ -361,6 +361,10 @@ func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
 		return nil, err
 	}
 
+	if rank < 1 {
+		return nil, fmt.Errorf("rank %d out of range", rank)
+	}
+
 	b := mat.NewDense(rows, rows, nil)
 	for i := range rows {
 		b.Set(i, i, 1.0)
