@@ -92,7 +92,7 @@ fmt.Println(reac.FinalReaction())
 ```
 * Calculation of masses for user-defined coefficients in `Force` (calculates regardless of balance) and `Check` (checks if reaction is balanced by user-defined coefficients) modes.
 ```Go
-reacOpts := ReactionOptions{
+reacOpts := g.ReactionOptions{
 		Rmode:      Force,
 		Target:     0,
 		TargerMass: 1.0,
@@ -105,7 +105,7 @@ fmt.Println(reaction.Masses())
 //[0.84623763 0.34248749 1]
 ```
 ```Go
-reacOpts := ReactionOptions{
+reacOpts := g.ReactionOptions{
 		Rmode:      Check,
 		Target:     0,
 		TargerMass: 1.0,
