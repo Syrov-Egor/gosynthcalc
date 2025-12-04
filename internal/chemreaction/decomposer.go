@@ -48,8 +48,8 @@ type reactionDecomposer struct {
 }
 
 func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
-	if reaction == "" {
-		return nil, fmt.Errorf("empty reaction string")
+	if len(reaction) < 2 {
+		return nil, fmt.Errorf("empty or invalid reaction string")
 	}
 
 	separator := extractSeparator(reaction)

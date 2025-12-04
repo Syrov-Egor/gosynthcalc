@@ -11,13 +11,13 @@ Detailed docs are presented for [Python version](https://syrov-egor.github.io/ch
 ## Example use
 Let's say that we need to prepare 3 grams of [YBCO](https://en.wikipedia.org/wiki/Yttrium_barium_copper_oxide) by solid-state synthesis from respective carbonates. The reaction string will look something like this (to simplify, let's leave it without oxygen nonstoichiometry):
 ```Go
-import "github.com/Syrov-Egor/gosynthcalc/"
+import g "github.com/Syrov-Egor/gosynthcalc/"
 
 reactionStr := "BaCO3 + Y2(CO3)3 + CuCO3 + O2 = YBa2Cu3O7 + CO2"
 ```
 Now, we can create a chemical reaction object of the ChemicalReaction struct, which will be used in the calculation. We need to specify the arguments for our particular case:
 ```Go
-reacOpts := ReactionOptions{
+reacOpts := g.ReactionOptions{
                 Rmode:       Balance,
                 Target:     0,
 	            TargerMass: 3.0,
@@ -25,7 +25,7 @@ reacOpts := ReactionOptions{
 	            Precision:  8,
 	            Tolerance:  1e-8,
 	            }
-reaction, _ := NewChemicalReaction(reactionStr, reacOpts) // Errors are supressed in this example
+reaction, _ := g.NewChemicalReaction(reactionStr, reacOpts) // Errors are supressed in this example
 ```
 Now, to perform the automatic calculation, all we need to do is to put:
 ```Go
@@ -63,19 +63,19 @@ And we get our output in the terminal:
 ## Features
 * Formula parsing
 ```Go
-form, _ := NewChemicalFormula("C2H5OH")
+form, _ := g.NewChemicalFormula("C2H5OH")
 fmt.Println(form.ParsedFormula())
 //['C': 2 'H': 6 'O': 1]
 ```
 * Calculation of the molar mass 
 ```Go
-form, _ := NewChemicalFormula("C2H5OH")
+form, _ := g.NewChemicalFormula("C2H5OH")
 fmt.Println(form.MolarMass())
 //46.069
 ```
 * [Mass](https://en.wikipedia.org/wiki/Mass_fraction_(chemistry)), [atomic](https://en.wikipedia.org/wiki/Mole_fraction), and [oxide](https://d32ogoqmya1dw8.cloudfront.net/files/introgeo/studio/examples/minex02.pdf) percent calculations (including user-defined oxides).
 ```Go
-form, _ := NewChemicalFormula("C2H5OH")
+form, _ := g.NewChemicalFormula("C2H5OH")
 fmt.Println(form.MassPercent())
 fmt.Println(form.AtomicPercent())
 fmt.Println(form.OxidePercent())
@@ -86,7 +86,7 @@ fmt.Println(form.OxidePercent())
 * Auto-balancing chemical equations by 4 different matrix methods in `Balance` mode:
 ```Go
 reacStr := "K4Fe(CN)6 + KMnO4 + H2SO4 = KHSO4 + Fe2(SO4)3 + MnSO4 + HNO3 + CO2 + H2O"
-reac, _ := NewChemicalReaction(reacStr)
+reac, _ := g.NewChemicalReaction(reacStr)
 fmt.Println(reac.FinalReaction())
 //10K4Fe(CN)6+122KMnO4+299H2SO4=162KHSO4+5Fe2(SO4)3+122MnSO4+60HNO3+60CO2+188H2O
 ```
@@ -100,7 +100,7 @@ reacOpts := ReactionOptions{
 		Precision:  8,
 		Tolerance:  1e-8,
 	}
-reaction, _ := NewChemicalReaction("BaCO3+TiO2=BaTiO3", reacOpts) //We can drop CO2 product and still get masses in this mode. 
+reaction, _ := g.NewChemicalReaction("BaCO3+TiO2=BaTiO3", reacOpts) //We can drop CO2 product and still get masses in this mode. 
 fmt.Println(reaction.Masses())
 //[0.84623763 0.34248749 1]
 ```
@@ -113,7 +113,7 @@ reacOpts := ReactionOptions{
 		Precision:  8,
 		Tolerance:  1e-8,
 	}
-reaction, _ := NewChemicalReaction("H2+O2=2H2O", reacOpts) //Obviously not balanced
+reaction, _ := g.NewChemicalReaction("H2+O2=2H2O", reacOpts) //Obviously not balanced
 coefs, err := reaction.Coefficients()
 if err != nil {
 	fmt.Println(err)

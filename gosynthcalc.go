@@ -3,20 +3,20 @@
 // Go library for calculating the masses of substances required for chemical synthesis directly from the reaction string.
 // It includes solutions for all intermediate steps, including chemical formula parsing, molar mass calculation and reaction
 // balancing with different matrix methods. This is rewrite of [Python chemsynthcalc project] in Go, so for the deep detailed documentation
-// one should check [chemsynthcalc docs]. The main purpose of rewrite is to use it with [Fyne] for GUIs.
+// one should check [chemsynthcalc docs]. The main purpose of rewrite is to use it with [Wails] for GUIs.
 //
 // # Usage
 //
 // Let's say that we need to prepare 3 grams of [YBCO] by solid-state synthesis from respective carbonates.
 // The reaction string will look something like this (to simplify, let's leave it without oxygen nonstoichiometry):
 //
-//	import "github.com/Syrov-Egor/gosynthcalc/"
+//	import g "github.com/Syrov-Egor/gosynthcalc/"
 //
 //	reactionStr := "BaCO3 + Y2(CO3)3 + CuCO3 + O2 = YBa2Cu3O7 + CO2"
 //
 // Now, we can create a chemical reaction object of the ChemicalReaction struct, which will be used in the calculation. We need to specify the arguments for our particular case :
 //
-//	reacOpts := ReactionOptions{
+//	reacOpts := g.ReactionOptions{
 //	                Rmode:       Balance,
 //	                Target:     0,
 //	                TargerMass: 3.0,
@@ -25,7 +25,7 @@
 //	                Tolerance:  1e-8,
 //	            }
 //
-//	reaction, _ := NewChemicalReaction(reactionStr, reacOpts) // Errors are supressed in this example
+//	reaction, _ := g.NewChemicalReaction(reactionStr, reacOpts) // Errors are supressed in this example
 //
 // Now, to perform the automatic calculation, all we need to do is to put:
 //
@@ -62,7 +62,7 @@
 // [YBCO]: https://en.wikipedia.org/wiki/Yttrium_barium_copper_oxide
 // [Python chemsynthcalc project]: https://github.com/Syrov-Egor/chemsynthcalc
 // [chemsynthcalc docs]: https://syrov-egor.github.io/chemsynthcalc/API/
-// [Fyne]: https://fyne.io/
+// [Wails]: https://wails.io/
 package gosynthcalc
 
 import (
