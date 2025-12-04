@@ -122,7 +122,7 @@ if err != nil {
 fmt.Println(coefs.Result)
 //Reaction is not balanced
 ```
-* Calculation of coefficients individually by each of 4 different algorithms (inverse, general pseudoinverse, partial pseudoinverse and combinatorial algorithms).
+* Calculation of coefficients individually by each of 4 different algorithms (inverse, general pseudoinverse, partial pseudoinverse and combinatorial algorithms).  
 
 ## License
 The code is provided under the MIT license.
