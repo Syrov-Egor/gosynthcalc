@@ -47,57 +47,73 @@ func RoundFloatS(s []float64, precision uint) []float64 {
 	return res
 }
 
-// Simple fraction struct for the intify process
 type SimpleFraction struct {
 	Num, Den int64
 }
 
-// Create fraction from float64 using limit_denominator approach similar to Python
 func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
 	if math.IsInf(f, 0) || math.IsNaN(f) || f == 0 {
 		return SimpleFraction{0, 1}
 	}
 
-	// Handle negative numbers
 	sign := int64(1)
 	if f < 0 {
 		sign = -1
 		f = -f
 	}
 
-	// If it's already an integer
 	if f == math.Floor(f) && f < float64(maxDenominator) {
 		return SimpleFraction{sign * int64(f), 1}
 	}
 
-	// Use Python's Fraction.limit_denominator() algorithm
-	// This is simpler than the continued fraction approach
-	bestNum, bestDen := int64(0), int64(1)
-	bestError := math.Abs(f)
+	if f >= float64(maxDenominator) {
+		intPart := min(int64(f), maxDenominator)
+		return SimpleFraction{sign * intPart, 1}
+	}
 
-	for den := int64(1); den <= maxDenominator; den++ {
-		num := int64(math.Round(f * float64(den)))
-		if num == 0 && f != 0 {
-			continue
-		}
+	lowerNum, lowerDen := int64(0), int64(1)
+	upperNum, upperDen := int64(1), int64(0)
 
-		error := math.Abs(f - float64(num)/float64(den))
-		if error < bestError {
-			bestError = error
-			bestNum = num
-			bestDen = den
-		}
-
-		// If we found an exact match, stop
-		if error < 1e-15 {
+	for {
+		mediantNum := lowerNum + upperNum
+		mediantDen := lowerDen + upperDen
+		if mediantDen > maxDenominator {
 			break
+		}
+
+		mediantValue := float64(mediantNum) / float64(mediantDen)
+
+		if mediantValue < f {
+			lowerNum, lowerDen = mediantNum, mediantDen
+		} else if mediantValue > f {
+			upperNum, upperDen = mediantNum, mediantDen
+		} else {
+			return SimpleFraction{sign * mediantNum, mediantDen}
+		}
+
+		if lowerDen > 0 && upperDen > 0 {
+			lowerVal := float64(lowerNum) / float64(lowerDen)
+			upperVal := float64(upperNum) / float64(upperDen)
+			if upperVal-lowerVal < 1e-15 {
+				break
+			}
+		}
+	}
+
+	bestNum, bestDen := lowerNum, lowerDen
+	bestError := math.Abs(f - float64(lowerNum)/float64(lowerDen))
+
+	if upperDen > 0 {
+		upperError := math.Abs(f - float64(upperNum)/float64(upperDen))
+		if upperError < bestError {
+			bestNum, bestDen = upperNum, upperDen
+			bestError = upperError
 		}
 	}
 
 	return SimpleFraction{sign * bestNum, bestDen}
 }
 
-// Find LCM of a slice of integers
 func FindLCMSliceInt64(nums []int64) int64 {
 	if len(nums) == 0 {
 		return 1
@@ -105,7 +121,6 @@ func FindLCMSliceInt64(nums []int64) int64 {
 
 	result := nums[0]
 	for i := 1; i < len(nums); i++ {
-		// Check for potential overflow before calculation
 		if willLCMOverflow(result, nums[i]) {
 			return -1
 		}
@@ -114,7 +129,6 @@ func FindLCMSliceInt64(nums []int64) int64 {
 	return result
 }
 
-// Helper function to check if LCM calculation will overflow
 func willLCMOverflow(a, b int64) bool {
 	if a == 0 || b == 0 {
 		return false
@@ -178,7 +192,6 @@ func gcdInt64(a, b int64) int64 {
 	return a
 }
 
-// Find GCD of a slice of integers
 func FindGCDSliceInt64(nums []int64) int64 {
 	if len(nums) == 0 {
 		return 1
