@@ -127,13 +127,3 @@ var periodicTable pTable = pTable{
 	"Ts": element{293, "Ts2O7"},
 	"Og": element{294, "Og"},
 }
-
-var periodicTableElements []string = getKeys(periodicTable)
-
-func getKeys(p pTable) []string {
-	keys := make([]string, 0, len(p))
-	for k := range p {
-		keys = append(keys, k)
-	}
-	return keys
-}
