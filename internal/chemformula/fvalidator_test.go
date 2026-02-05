@@ -96,25 +96,31 @@ func Test_formulaValidator_validate_InvalidSymbolsError(t *testing.T) {
 		name          string
 		formula       string
 		wantErr       bool
-		wantedSymbols []rune
+		wantedSymbols []string
 	}{
 		{
 			name:          "formula with special characters",
 			formula:       "H2O@#$",
 			wantErr:       true,
-			wantedSymbols: []rune{'@', '#', '$'},
+			wantedSymbols: []string{"@", "#", "$"},
+		},
+		{
+			name:          "formula with cyrillic characters",
+			formula:       "Hг2O",
+			wantErr:       true,
+			wantedSymbols: []string{"г"},
 		},
 		{
 			name:          "formula with invalid punctuation",
 			formula:       "H2O,NH3",
 			wantErr:       true,
-			wantedSymbols: []rune{','},
+			wantedSymbols: []string{","},
 		},
 		{
 			name:          "formula with valid brackets and adducts",
 			formula:       "Ca(OH)2*H2O",
 			wantErr:       false,
-			wantedSymbols: []rune{},
+			wantedSymbols: []string{},
 		},
 	}
 	for _, tt := range tests {

@@ -10,7 +10,7 @@ type formulaValidator struct {
 }
 
 type validationResults struct {
-	invalidSymbols []rune
+	invalidSymbols []string
 	invalidAtoms   []string
 	lBracket       int
 	rBracket       int
@@ -49,15 +49,21 @@ func (v formulaValidator) validate() error {
 }
 
 func (v formulaValidator) validatorRunner() validationResults {
-	invalidSymbols := make([]rune, 0, len(v.sanFormula))
-	invalidAtoms := make([]string, 0, len(v.sanFormula))
+	invalidSymbols := make([]string, 0, 5)
+	invalidAtoms := make([]string, 0, 5)
 	var lBracket, rBracket, adduct, letters int
 
-	for i := 0; i < len(v.sanFormula); i++ {
-		char := rune(v.sanFormula[i])
+	runes := []rune(v.sanFormula)
+
+	for i := 0; i < len(runes); i++ {
+		char := runes[i]
 
 		if !v.isSymbolAllowed(char) {
-			invalidSymbols = append(invalidSymbols, char)
+			invalidSymbols = append(invalidSymbols, string(char))
+		}
+		if i+1 < len(runes) && !v.isSymbolAllowed(runes[i+1]) {
+			invalidSymbols = append(invalidSymbols, string(runes[i+1]))
+			i++
 		}
 
 		switch char {
@@ -74,26 +80,24 @@ func (v formulaValidator) validatorRunner() validationResults {
 		}
 
 		if unicode.IsLower(char) {
-			if i == 0 || !unicode.IsUpper(rune(v.sanFormula[i-1])) {
+			if i == 0 || !unicode.IsUpper(runes[i-1]) {
 				invalidAtoms = append(invalidAtoms, string(char))
 			}
 		}
 
 		if unicode.IsUpper(char) {
-			elem := string(v.sanFormula[i])
-
-			if i+1 < len(v.sanFormula) && unicode.IsLower(rune(v.sanFormula[i+1])) {
-				elem = v.sanFormula[i : i+2]
+			elem := string(char)
+			if i+1 < len(runes) && unicode.IsLower(runes[i+1]) {
+				elem = string(runes[i : i+2])
 				i++
 			}
-
 			_, ok := periodicTable[elem]
-
 			if !ok {
 				invalidAtoms = append(invalidAtoms, elem)
 			}
 		}
 	}
+
 	return validationResults{
 		invalidSymbols: invalidSymbols,
 		invalidAtoms:   invalidAtoms,

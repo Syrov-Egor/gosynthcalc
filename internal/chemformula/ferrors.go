@@ -20,16 +20,12 @@ func (e NoLettersError) Error() string {
 
 type InvalidSymbolsError struct {
 	formula string
-	symbols []rune
+	symbols []string
 }
 
 func (e InvalidSymbolsError) Error() string {
-	invalid := make([]string, len(e.symbols))
-	for i := range e.symbols {
-		invalid[i] = string(e.symbols[i])
-	}
 	return fmt.Sprintf("There are invalid symbols(s) %v in the formula '%s'",
-		invalid, e.formula)
+		e.symbols, e.formula)
 }
 
 type InvalidAtomsError struct {
