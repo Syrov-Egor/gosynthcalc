@@ -63,7 +63,7 @@
 // [Python chemsynthcalc project]: https://github.com/Syrov-Egor/chemsynthcalc
 // [chemsynthcalc docs]: https://syrov-egor.github.io/chemsynthcalc/API/
 // [Wails]: https://wails.io/
-package gosynthcalc
+package main
 
 import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/chemformula"

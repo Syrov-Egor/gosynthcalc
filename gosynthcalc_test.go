@@ -1,4 +1,4 @@
-package gosynthcalc
+package main
 
 import (
 	"fmt"
