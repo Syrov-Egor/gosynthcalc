@@ -62,9 +62,9 @@ func (p chemicalFormulaParser) parseToMap(formula string) (map[string]float64, i
 				i += len(matches[0])
 			}
 
-			submol, lenght := p.parseToMap("(" + formula[i+1:] + ")" + strconv.FormatFloat(weight, 'f', -1, 64))
+			submol, length := p.parseToMap("(" + formula[i+1:] + ")" + strconv.FormatFloat(weight, 'f', -1, 64))
 			mol = p.fuse(mol, submol, 1.0)
-			i += lenght + 1
+			i += length + 1
 
 		case slices.Contains(formRegexes.closerBrackets, token):
 			matches := formRegexes.coefRegex.FindStringSubmatch(formula[i+1:])

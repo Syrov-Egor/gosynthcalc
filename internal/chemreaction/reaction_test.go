@@ -132,7 +132,7 @@ func TestChemicalReaction_setCoefficientsWronglen(t *testing.T) {
 	reac, _ := NewChemicalReaction(reactionStr)
 	coefs := []float64{2, 5, 6, 1, 2, 4}
 	err := reac.SetCoefficients(coefs)
-	expected := "lenght of coefficient slice should be 7, got 6"
+	expected := "length of coefficient slice should be 7, got 6"
 	if err.Error() != expected {
 		t.Errorf("this test should give error %s, got %s instead",
 			expected,

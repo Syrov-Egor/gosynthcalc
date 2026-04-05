@@ -25,7 +25,7 @@
 //	                Tolerance:  1e-8,
 //	            }
 //
-//	reaction, _ := g.NewChemicalReaction(reactionStr, reacOpts) // Errors are supressed in this example
+//	reaction, _ := g.NewChemicalReaction(reactionStr, reacOpts) // Errors are suppressed in this example
 //
 // Now, to perform the automatic calculation, all we need to do is to put:
 //

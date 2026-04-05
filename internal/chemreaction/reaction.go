@@ -195,7 +195,7 @@ func (r *ChemicalReaction) Coefficients() (*MethodResult, error) {
 
 func (r *ChemicalReaction) SetCoefficients(coefs []float64) error {
 	if len(coefs) != len(r.decomposer.compounds) {
-		return fmt.Errorf("lenght of coefficient slice should be %d, got %d", len(r.decomposer.compounds), len(coefs))
+		return fmt.Errorf("length of coefficient slice should be %d, got %d", len(r.decomposer.compounds), len(coefs))
 	}
 	for i, coef := range coefs {
 		if coef <= 0 {
