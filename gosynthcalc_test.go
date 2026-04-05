@@ -71,8 +71,8 @@ func BenchmarkChemicalFormula_output(b *testing.B) {
 	}
 
 	if calls > 0 {
-		avgTimeMilli := float64(totalTime.Milliseconds()) / float64(calls)
-		b.ReportMetric(avgTimeMilli, "ms/formula")
+		avgTimeMilli := float64(totalTime.Microseconds()) / float64(calls)
+		b.ReportMetric(avgTimeMilli, "μs/formula")
 	}
 }
 
@@ -95,7 +95,7 @@ func BenchmarkChemicalReaction_output(b *testing.B) {
 			if oerr != nil {
 				b.Fatalf("Error at reaction %d: %v", idx, oerr)
 			}
-			_, err := f.WriteString(fmt.Sprintf("%s\n", out))
+			_, err := fmt.Fprintf(f, "%s\n", out)
 			totalTime += time.Since(start)
 			calls++
 			if err != nil {
@@ -105,8 +105,8 @@ func BenchmarkChemicalReaction_output(b *testing.B) {
 	}
 
 	if calls > 0 {
-		avgTimeMilli := float64(totalTime.Milliseconds()) / float64(calls)
-		b.ReportMetric(avgTimeMilli, "ms/reaction")
+		avgTimeMilli := float64(totalTime.Microseconds()) / float64(calls)
+		b.ReportMetric(avgTimeMilli, "μs/reaction")
 	}
 }
 
