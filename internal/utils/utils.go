@@ -71,43 +71,62 @@ func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
 		return SimpleFraction{sign * intPart, 1}
 	}
 
-	lowerNum, lowerDen := int64(0), int64(1)
-	upperNum, upperDen := int64(1), int64(0)
+	p0, q0 := int64(0), int64(1)
+	p1, q1 := int64(1), int64(0)
 
 	for {
-		mediantNum := lowerNum + upperNum
-		mediantDen := lowerDen + upperDen
-		if mediantDen > maxDenominator {
+		medDen := q0 + q1
+		if medDen > maxDenominator {
 			break
 		}
+		medNum := p0 + p1
+		medVal := float64(medNum) / float64(medDen)
 
-		mediantValue := float64(mediantNum) / float64(mediantDen)
-
-		if mediantValue < f {
-			lowerNum, lowerDen = mediantNum, mediantDen
-		} else if mediantValue > f {
-			upperNum, upperDen = mediantNum, mediantDen
-		} else {
-			return SimpleFraction{sign * mediantNum, mediantDen}
-		}
-
-		if lowerDen > 0 && upperDen > 0 {
-			lowerVal := float64(lowerNum) / float64(lowerDen)
-			upperVal := float64(upperNum) / float64(upperDen)
-			if upperVal-lowerVal < 1e-15 {
-				break
+		if medVal < f {
+			lo, hi := int64(1), maxDenominator
+			for lo < hi {
+				mid := lo + (hi-lo+1)/2
+				nextDen := q0 + mid*q1
+				if nextDen > maxDenominator {
+					hi = mid - 1
+					continue
+				}
+				nextNum := p0 + mid*p1
+				if float64(nextNum)/float64(nextDen) < f {
+					lo = mid
+				} else {
+					hi = mid - 1
+				}
 			}
+			p0, q0 = p0+lo*p1, q0+lo*q1
+		} else if medVal > f {
+			lo, hi := int64(1), maxDenominator
+			for lo < hi {
+				mid := lo + (hi-lo+1)/2
+				nextDen := mid*q0 + q1
+				if nextDen > maxDenominator {
+					hi = mid - 1
+					continue
+				}
+				nextNum := mid*p0 + p1
+				if float64(nextNum)/float64(nextDen) > f {
+					lo = mid
+				} else {
+					hi = mid - 1
+				}
+			}
+			p1, q1 = lo*p0+p1, lo*q0+q1
+		} else {
+			return SimpleFraction{sign * medNum, medDen}
 		}
 	}
+	bestNum, bestDen := p0, q0
+	bestError := math.Abs(f - float64(p0)/float64(q0))
 
-	bestNum, bestDen := lowerNum, lowerDen
-	bestError := math.Abs(f - float64(lowerNum)/float64(lowerDen))
-
-	if upperDen > 0 {
-		upperError := math.Abs(f - float64(upperNum)/float64(upperDen))
+	if q1 > 0 && q1 <= maxDenominator {
+		upperError := math.Abs(f - float64(p1)/float64(q1))
 		if upperError < bestError {
-			bestNum, bestDen = upperNum, upperDen
-			bestError = upperError
+			bestNum, bestDen = p1, q1
 		}
 	}
 
