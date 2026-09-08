@@ -119,14 +119,14 @@ type cfOutput struct {
 }
 
 func (o cfOutput) String() string {
-	form := fmt.Sprintln("formula:", o.Formula)
-	pForm := fmt.Sprintln("parsed formula:", o.ParsedFormula)
-	mMass := fmt.Sprintln("molar mass:", o.MolarMass)
-	mPercent := fmt.Sprintln("mass percent:", o.MassPercent)
-	aPercent := fmt.Sprintln("atomic percent:", o.AtomicPercent)
-	oPercent := fmt.Sprint("oxide percent: ", o.OxidePercent)
-	res := form + pForm + mMass + mPercent + aPercent + oPercent
-	return res
+	var sb strings.Builder
+	fmt.Fprintln(&sb, "formula:", o.Formula)
+	fmt.Fprintln(&sb, "parsed formula:", o.ParsedFormula)
+	fmt.Fprintln(&sb, "molar mass:", o.MolarMass)
+	fmt.Fprintln(&sb, "mass percent:", o.MassPercent)
+	fmt.Fprintln(&sb, "atomic percent:", o.AtomicPercent)
+	fmt.Fprint(&sb, "oxide percent: ", o.OxidePercent)
+	return sb.String()
 }
 
 func roundAtomS(s []Atom, precision uint) []Atom {
