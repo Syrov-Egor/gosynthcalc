@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+silent: true
+
+tasks:
+  default:
+    desc: "Task runner for gosynthcalc package"
+    cmds:
+      - echo "Task runner for gosynthcalc package. To see all of the tasks, run 'task --list'"
+
+  test:
+    desc: "Run all unit tests"
+    cmds:
+      - go test ./...
+  
+  bench:
+    desc: "Run all benchmarks"
+    cmds:
+      - go test -bench .
+  
+  bench-formula:
+    desc: "Run chemformula benchmark"
+    cmds:
+      - go test -bench BenchmarkChemicalFormula_output
+
+  bench-reaction:
+    desc: "Run chemreaction benchmark"
+    cmds:
+      - go test -bench BenchmarkChemicalReaction_output
