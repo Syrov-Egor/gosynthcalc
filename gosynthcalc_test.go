@@ -46,6 +46,7 @@ func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
 }
 
 func BenchmarkChemicalFormula_output(b *testing.B) {
+	b.ReportAllocs()
 	_, formulas := setup("data/text_mined_reactions.txt")
 
 	f, err := os.Create("data/formula_output.txt")
@@ -77,6 +78,7 @@ func BenchmarkChemicalFormula_output(b *testing.B) {
 }
 
 func BenchmarkChemicalReaction_output(b *testing.B) {
+	b.ReportAllocs()
 	reactions, _ := setup("data/text_mined_reactions.txt")
 
 	f, err := os.Create("data/reaction_output.txt")
