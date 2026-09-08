@@ -6,6 +6,7 @@ silent: true
 
 vars:
   BENCH_COUNT: 10
+  PROF_DIR: "prof"
 
 tasks:
   default:
@@ -35,8 +36,41 @@ tasks:
       - task: bench-formula
       - echo "Reaction:"
       - task: bench-reaction
-      
-  prof:
-    desc: "Run pprof profiler on benchmarks"
+  
+  ensure-prof-dir:
+    internal: true
+    desc: "Ensure that profile directory exist"
     cmds:
-      - go test -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
+      - mkdir -p {{.PROF_DIR}}
+
+  clean-prof:
+    internal: true
+    desc: "Remove all profile artifacts but keep the prof directory"
+    cmds:
+      - rm -f {{.PROF_DIR}}/*
+
+  prof-formula:
+    desc: "Run pprof profiler on chemformula benchmark"
+    deps: [ensure-prof-dir]
+    cmds:
+      - go test -bench=BenchmarkChemicalFormula_output -run='^$' -benchtime=2s -cpuprofile={{.PROF_DIR}}/cpu_formula.pprof -memprofile={{.PROF_DIR}}/mem_formula.pprof -o {{.PROF_DIR}}/formula.test > /dev/null
+  
+  prof-reaction:
+    desc: "Run pprof profiler on chemreaction benchmark"
+    deps: [ensure-prof-dir]
+    cmds:
+      - go test -bench=BenchmarkChemicalReaction_output -run='^$' -benchtime=2s -cpuprofile={{.PROF_DIR}}/cpu_reaction.pprof -memprofile={{.PROF_DIR}}/mem_reaction.pprof -o {{.PROF_DIR}}/reaction.test > /dev/null
+  
+  prof:
+    desc: "Run all profiles"
+    deps: [ensure-prof-dir, clean-prof]
+    cmds:
+      - task: prof-formula
+      - task: prof-reaction
+      - echo "Profiling done. Results are in /{{.PROF_DIR}}"
+  
+  watch-prof:
+    desc: "Open a CLI interface to watch pprof results. OBJECT is 'reaction' or 'formula'. TYPE is 'cpu' or 'mem'. AGRS are any additional arguments (like '-alloc_objects')"
+    deps: [ensure-prof-dir]
+    cmds:
+      - go tool pprof {{.ARGS}} {{.PROF_DIR}}/{{.OBJECT}}.test {{.PROF_DIR}}/{{.TYPE}}_{{.OBJECT}}.pprof
