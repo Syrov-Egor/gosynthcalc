@@ -4,6 +4,9 @@ version: '3'
 
 silent: true
 
+vars:
+  BENCH_COUNT: 10
+
 tasks:
   default:
     desc: "Task runner for gosynthcalc package"
@@ -15,21 +18,24 @@ tasks:
     cmds:
       - go test ./...
   
-  bench:
-    desc: "Run all benchmarks"
-    cmds:
-      - go test -bench .
-  
   bench-formula:
     desc: "Run chemformula benchmark"
     cmds:
-      - go test -bench BenchmarkChemicalFormula_output
+      - go test -bench=BenchmarkChemicalFormula_output -count={{.BENCH_COUNT}} -run='^$' | benchstat -
 
   bench-reaction:
     desc: "Run chemreaction benchmark"
     cmds:
-      - go test -bench BenchmarkChemicalReaction_output
+      - go test -bench=BenchmarkChemicalReaction_output -count={{.BENCH_COUNT}} -run='^$' | benchstat -
   
+  bench:
+    desc: "Run all benchmarks"
+    cmds:
+      - echo "Formula:"
+      - task: bench-formula
+      - echo "Reaction:"
+      - task: bench-reaction
+      
   prof:
     desc: "Run pprof profiler on benchmarks"
     cmds:
