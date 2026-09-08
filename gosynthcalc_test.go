@@ -7,10 +7,9 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 )
 
-func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
+func setup(fname string) ([]string, []string) {
 	file, err := os.Open(fname)
 	if err != nil {
 		log.Fatal(err)
@@ -25,8 +24,9 @@ func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
 		log.Fatal(err)
 	}
 	reactionsStr := strings.Split(string(b), "\n")
-	reactions := []ChemicalReaction{}
-	formulas := []ChemicalFormula{}
+	formulas := []string{}
+	reactions := []string{}
+
 	for _, reac := range reactionsStr {
 		if strings.TrimSpace(reac) == "" {
 			continue
@@ -35,80 +35,54 @@ func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
 		if err != nil {
 			panic(err)
 		}
-		reactions = append(reactions, *reacO)
+		reactions = append(reactions, reac)
+
 		forms, err := reacO.ChemFormulas()
 		if err != nil {
 			panic(err)
 		}
-		formulas = append(formulas, forms...)
+		for _, f := range forms {
+			formulas = append(formulas, f.Formula())
+		}
 	}
-	return reactions, formulas
+	return formulas, reactions
 }
 
 func BenchmarkChemicalFormula_output(b *testing.B) {
 	b.ReportAllocs()
-	_, formulas := setup("data/text_mined_reactions.txt")
+	formulas, _ := setup("data/text_mined_reactions.txt")
+	n := len(formulas)
 
-	f, err := os.Create("data/formula_output.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer f.Close()
-
-	var totalTime time.Duration
-	var calls int64
-
+	i := 0
 	for b.Loop() {
-		for _, form := range formulas {
-			start := time.Now()
-			out := form.Output()
-			_, err := f.WriteString(out.String() + "\n")
-			totalTime += time.Since(start)
-			calls++
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	}
+		form := formulas[i%n]
+		i++
 
-	if calls > 0 {
-		avgTimeMilli := float64(totalTime.Microseconds()) / float64(calls)
-		b.ReportMetric(avgTimeMilli, "μs/formula")
+		formulaObj, err := NewChemicalFormula(form)
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = formulaObj.Output()
 	}
 }
 
 func BenchmarkChemicalReaction_output(b *testing.B) {
 	b.ReportAllocs()
-	reactions, _ := setup("data/text_mined_reactions.txt")
+	_, reactions := setup("data/text_mined_reactions.txt")
+	n := len(reactions)
 
-	f, err := os.Create("data/reaction_output.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer f.Close()
-
-	var totalTime time.Duration
-	var calls int64
-
+	i := 0
 	for b.Loop() {
-		for idx, reac := range reactions {
-			start := time.Now()
-			out, oerr := reac.Output()
-			if oerr != nil {
-				b.Fatalf("Error at reaction %d: %v", idx, oerr)
-			}
-			_, err := fmt.Fprintf(f, "%s\n", out)
-			totalTime += time.Since(start)
-			calls++
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	}
+		reac := reactions[i%n]
+		i++
 
-	if calls > 0 {
-		avgTimeMilli := float64(totalTime.Microseconds()) / float64(calls)
-		b.ReportMetric(avgTimeMilli, "μs/reaction")
+		reactionObj, err := NewChemicalReaction(reac)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if _, err := reactionObj.Output(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
