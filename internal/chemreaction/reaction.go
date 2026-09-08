@@ -391,19 +391,20 @@ type crOutput struct {
 }
 
 func (o crOutput) String() string {
-	out := fmt.Sprintln("initial reaction:", o.Reaction) +
-		fmt.Sprint("reaction matrix:\n", o.Matrix, "\n") +
-		fmt.Sprintln("mode:", o.Mode) +
-		fmt.Sprintln("formulas:", o.Formulas) +
-		fmt.Sprintln("coefficients:", o.Coefficients) +
-		fmt.Sprintln("coefficients normalized:", o.NormCoefficients) +
-		fmt.Sprintln("algorithm:", o.Algorithm) +
-		fmt.Sprintln("is balanced:", o.IsBalanced) +
-		fmt.Sprintln("final reaction:", o.FinalReaction) +
-		fmt.Sprintln("final reaction normalized:", o.FinalReactionNorm) +
-		fmt.Sprintln("molar masses:", o.MolarMasses) +
-		fmt.Sprintln("target:", o.Target) +
-		fmt.Sprintln("masses:", o.Masses)
+	var out strings.Builder
+	fmt.Fprintln(&out, "initial reaction:", o.Reaction)
+	fmt.Fprint(&out, "reaction matrix:\n", o.Matrix, "\n")
+	fmt.Fprintln(&out, "mode:", o.Mode)
+	fmt.Fprintln(&out, "formulas:", o.Formulas)
+	fmt.Fprintln(&out, "coefficients:", o.Coefficients)
+	fmt.Fprintln(&out, "coefficients normalized:", o.NormCoefficients)
+	fmt.Fprintln(&out, "algorithm:", o.Algorithm)
+	fmt.Fprintln(&out, "is balanced:", o.IsBalanced)
+	fmt.Fprintln(&out, "final reaction:", o.FinalReaction)
+	fmt.Fprintln(&out, "final reaction normalized:", o.FinalReactionNorm)
+	fmt.Fprintln(&out, "molar masses:", o.MolarMasses)
+	fmt.Fprintln(&out, "target:", o.Target)
+	fmt.Fprintln(&out, "masses:", o.Masses)
 
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
@@ -412,7 +413,7 @@ func (o crOutput) String() string {
 		fmt.Fprintf(w, "%s\tM = %v\tg/mol\tm = %v\tg\n",
 			comp, o.MolarMasses[i], o.Masses[i])
 	}
-
 	w.Flush()
-	return out + strings.TrimSuffix(buf.String(), "\n")
+
+	return out.String() + strings.TrimSuffix(buf.String(), "\n")
 }
