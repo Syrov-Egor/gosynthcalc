@@ -29,3 +29,8 @@ tasks:
     desc: "Run chemreaction benchmark"
     cmds:
       - go test -bench BenchmarkChemicalReaction_output
+  
+  prof:
+    desc: "Run pprof profiler on benchmarks"
+    cmds:
+      - go test -bench=. -cpuprofile=cpu.pprof -memprofile=mem.pprof
