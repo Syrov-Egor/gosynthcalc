@@ -2,12 +2,38 @@ package chemformula
 
 import (
 	"fmt"
-	"slices"
-	"sort"
 	"strings"
-
-	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
+
+var (
+	allowed     [256]bool
+	validSingle [26]bool
+	validDouble [26][26]bool
+)
+
+func init() {
+	for c := 'a'; c <= 'z'; c++ {
+		allowed[c] = true
+	}
+	for c := 'A'; c <= 'Z'; c++ {
+		allowed[c] = true
+	}
+	for c := '0'; c <= '9'; c++ {
+		allowed[c] = true
+	}
+	for _, c := range "().*" {
+		allowed[c] = true
+	}
+
+	for k := range periodicTable {
+		switch len(k) {
+		case 1:
+			validSingle[k[0]-'A'] = true
+		case 2:
+			validDouble[k[0]-'A'][k[1]-'a'] = true
+		}
+	}
+}
 
 func sanitize(formula string) string {
 	var res strings.Builder
@@ -19,6 +45,8 @@ func sanitize(formula string) string {
 			res.WriteRune(')')
 		case '·', '•':
 			res.WriteRune('*')
+		case ',':
+			res.WriteRune('.')
 		case ' ':
 		default:
 			res.WriteRune(r)
@@ -31,79 +59,117 @@ type formulaValidator struct {
 	formula string
 }
 
-func (v formulaValidator) emptyFormula() bool {
-	return v.formula == ""
-}
-
-func (v formulaValidator) noLetters() bool {
-	return formRegexes.noLetterRegex.FindAllString(v.formula, -1) == nil
-}
-
-func (v formulaValidator) invalidCharacters() []string {
-	return formRegexes.allowedSymbols.FindAllString(v.formula, -1)
-}
-
-func (v formulaValidator) invalidAtoms() []string {
-	atoms := formRegexes.atomRegex.FindAllString(v.formula, -1)
-	invalid := make([]string, 0)
-	cFormula := strings.Clone(v.formula)
-	uniqueAtoms := utils.UniqueElems(atoms)
-	sort.Slice(uniqueAtoms, func(i, j int) bool {
-		return len(uniqueAtoms[i]) > len(uniqueAtoms[j])
-	})
-
-	for _, atom := range uniqueAtoms {
-		if !slices.Contains(periodicTableElements, atom) {
-			invalid = append(invalid, atom)
-		}
-		cFormula = strings.Replace(cFormula, atom, "", -1)
-	}
-	leftovers := formRegexes.letterRegex.FindAllString(cFormula, -1)
-	invalid = append(invalid, leftovers...)
-	return invalid
-}
-
-func (v formulaValidator) bracketsBalance() bool {
-	counter := utils.StringCounter(v.formula)
-	for i := range len(formRegexes.openerBrackets) {
-		open := string(formRegexes.openerBrackets[i])
-		close := string(formRegexes.closerBrackets[i])
-		if counter[open] != counter[close] {
-			return false
-		}
-	}
-	return true
-}
-
-func (v formulaValidator) numOfAdducts() int {
-	counter := utils.StringCounter(v.formula)
-	i := 0
-	for _, adduct := range formRegexes.adductSymbols {
-		i += counter[string(adduct)]
-	}
-	return i
-}
-
 func (v formulaValidator) validate() error {
-	var err error
-	switch {
-	case v.emptyFormula():
-		err = fmt.Errorf("Empty formula string")
-	case v.noLetters():
-		err = fmt.Errorf("No letters A-Z or a-z in the formula '%s'",
-			v.formula)
-	case len(v.invalidCharacters()) > 0:
-		err = fmt.Errorf("There are invalid character(s) %s in the formula '%s'",
-			v.invalidCharacters(), v.formula)
-	case len(v.invalidAtoms()) > 0:
-		err = fmt.Errorf("There are invalid atom(s) %s in the formula '%s'",
-			v.invalidAtoms(), v.formula)
-	case !v.bracketsBalance():
-		err = fmt.Errorf("Brackets %s %s are not balanced in the formula '%s'",
-			string(formRegexes.openerBrackets), string(formRegexes.closerBrackets), v.formula)
-	case v.numOfAdducts() > 1:
-		err = fmt.Errorf("There are more than 1 adduct symbol %s in the formula '%s'",
-			string(formRegexes.adductSymbols), v.formula)
+
+	if v.formula == "" {
+		return fmt.Errorf("Empty formula string")
 	}
-	return err
+
+	leftParenthesisCount, rightParenthesisCount, adductCount := 0, 0, 0
+	letterPresent := false
+	invalidCharacters := make([]rune, 0)
+	var allLetters strings.Builder
+
+	for _, r := range v.formula {
+		if !letterPresent {
+			letterPresent = isLetter(r)
+		}
+		if isLetter(r) {
+			allLetters.WriteRune(r)
+		}
+		if !v.isAllowed(r) {
+			invalidCharacters = append(invalidCharacters, r)
+		}
+		switch r {
+		case '(':
+			leftParenthesisCount++
+		case ')':
+			rightParenthesisCount++
+		case '*':
+			adductCount++
+		}
+	}
+
+	if !letterPresent {
+		return fmt.Errorf("No letters A-Z or a-z in the formula '%s'", v.formula)
+	}
+	if len(invalidCharacters) > 0 {
+		return fmt.Errorf("There are invalid character(s) %s in the formula '%s'", invalidCharacters, v.formula)
+	}
+	invalidAtoms := invalidAtoms(v.formula)
+	if len(invalidAtoms) > 0 {
+		return fmt.Errorf("There are invalid atom(s) %s in the formula '%s'", invalidAtoms, v.formula)
+	}
+	if leftParenthesisCount != rightParenthesisCount {
+		return fmt.Errorf("Parentheses [{()}] are not balanced in the formula '%s'", v.formula)
+	}
+	if adductCount > 1 {
+		return fmt.Errorf("There are more than 1 adduct symbol *•· in the formula '%s'", v.formula)
+	}
+	return nil
+}
+
+func (v formulaValidator) isAllowed(r rune) bool {
+	return r >= 0 && r < 256 && allowed[byte(r)]
+}
+
+func isLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func isValidElement(tok string) bool {
+	switch len(tok) {
+	case 1:
+		c := tok[0]
+		return c >= 'A' && c <= 'Z' && validSingle[c-'A']
+	case 2:
+		a, b := tok[0], tok[1]
+		return a >= 'A' && a <= 'Z' && b >= 'a' && b <= 'z' &&
+			validDouble[a-'A'][b-'a']
+	default:
+		return false
+	}
+}
+
+func invalidAtoms(text string) []string {
+	var res []string
+	for i := 0; i < len(text); {
+		c := text[i]
+		if c >= 'A' && c <= 'Z' {
+			j := i + 1
+			for j < len(text) && text[j] >= 'a' && text[j] <= 'z' {
+				j++
+			}
+			tok := text[i:j]
+			if !isValidElement(tok) {
+				dup := false
+				for _, s := range res {
+					if s == tok {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					res = append(res, tok)
+				}
+			}
+			i = j
+		} else if c >= 'a' && c <= 'z' {
+			tok := text[i : i+1]
+			dup := false
+			for _, s := range res {
+				if s == tok {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				res = append(res, tok)
+			}
+			i++
+		} else {
+			i++
+		}
+	}
+	return res
 }
