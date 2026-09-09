@@ -2,6 +2,7 @@ package chemformula
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -94,7 +95,7 @@ func (v formulaValidator) validate() error {
 		return fmt.Errorf("No letters A-Z or a-z in the formula '%s'", v.formula)
 	}
 	if len(invalidCharacters) > 0 {
-		return fmt.Errorf("There are invalid character(s) %s in the formula '%s'", invalidCharacters, v.formula)
+		return fmt.Errorf("There are invalid character(s) %s in the formula '%s'", string(invalidCharacters), v.formula)
 	}
 	invalidAtoms := invalidAtoms(v.formula)
 	if len(invalidAtoms) > 0 {
@@ -142,13 +143,7 @@ func invalidAtoms(text string) []string {
 			}
 			tok := text[i:j]
 			if !isValidElement(tok) {
-				dup := false
-				for _, s := range res {
-					if s == tok {
-						dup = true
-						break
-					}
-				}
+				dup := slices.Contains(res, tok)
 				if !dup {
 					res = append(res, tok)
 				}
@@ -156,13 +151,7 @@ func invalidAtoms(text string) []string {
 			i = j
 		} else if c >= 'a' && c <= 'z' {
 			tok := text[i : i+1]
-			dup := false
-			for _, s := range res {
-				if s == tok {
-					dup = true
-					break
-				}
-			}
+			dup := slices.Contains(res, tok)
 			if !dup {
 				res = append(res, tok)
 			}
