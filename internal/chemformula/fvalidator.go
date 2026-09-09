@@ -9,6 +9,24 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
+func sanitize(formula string) string {
+	var res strings.Builder
+	for _, r := range formula {
+		switch r {
+		case '[', '{':
+			res.WriteRune('(')
+		case ']', '}':
+			res.WriteRune(')')
+		case '·', '•':
+			res.WriteRune('*')
+		case ' ':
+		default:
+			res.WriteRune(r)
+		}
+	}
+	return res.String()
+}
+
 type formulaValidator struct {
 	formula string
 }

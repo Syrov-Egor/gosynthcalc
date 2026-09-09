@@ -7,9 +7,16 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
+const (
+	DefaultPrecision      uint = 8
+	DefaultPrintPrecision uint = 4
+)
+
 type ChemicalFormula struct {
-	formula       string
-	precision     uint
+	formula    string
+	sanFormula string
+	precision  uint
+
 	parsedFormula *[]Atom
 	molarMass     *float64
 	massPercent   *[]Atom
@@ -18,21 +25,22 @@ type ChemicalFormula struct {
 }
 
 func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, error) {
-	var prec uint = 8
+	var prec uint = DefaultPrecision
 	if len(precision) > 0 {
 		prec = precision[0]
 	}
 
-	newFormula := strings.Replace(formula, " ", "", -1)
-	validator := formulaValidator{formula: newFormula}
+	sanFormula := sanitize(formula)
+	validator := formulaValidator{formula: sanFormula}
 	err := validator.validate()
 	if err != nil {
 		return nil, err
 	}
 
 	return &ChemicalFormula{
-		formula:   newFormula,
-		precision: prec,
+		formula:    formula,
+		sanFormula: sanFormula,
+		precision:  prec,
 	}, nil
 }
 
@@ -43,7 +51,7 @@ func (c *ChemicalFormula) Formula() string {
 func (c *ChemicalFormula) ParsedFormula() []Atom {
 	if c.parsedFormula == nil {
 		parser := chemicalFormulaParser{}
-		parsed := parser.parse(c.formula)
+		parsed := parser.parse(c.sanFormula)
 		c.parsedFormula = &parsed
 	}
 	return *c.parsedFormula
@@ -91,7 +99,7 @@ func (c *ChemicalFormula) OxidePercent(inOxides ...string) ([]Atom, error) {
 func (c *ChemicalFormula) Output(printPrecision ...uint) cfOutput {
 	var pPrecision uint
 	if printPrecision == nil {
-		pPrecision = 4
+		pPrecision = DefaultPrintPrecision
 	} else {
 		pPrecision = printPrecision[0]
 	}
@@ -130,10 +138,10 @@ func (o cfOutput) String() string {
 }
 
 func roundAtomS(s []Atom, precision uint) []Atom {
-	ret := make([]Atom, len(s))
+	res := make([]Atom, len(s))
 	for i, atom := range s {
-		ret[i] = Atom{Label: atom.Label,
+		res[i] = Atom{Label: atom.Label,
 			Amount: utils.RoundFloat(atom.Amount, precision)}
 	}
-	return ret
+	return res
 }
