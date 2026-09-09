@@ -78,9 +78,11 @@ func BenchmarkChemicalReaction_output(b *testing.B) {
 
 		reactionObj, err := NewChemicalReaction(reac)
 		if err != nil {
+			b.Log(reactionObj)
 			b.Fatal(err)
 		}
 		if _, err := reactionObj.Output(); err != nil {
+			b.Log(reactionObj)
 			b.Fatal(err)
 		}
 	}

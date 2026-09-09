@@ -50,8 +50,8 @@ func (c *ChemicalFormula) Formula() string {
 
 func (c *ChemicalFormula) ParsedFormula() []Atom {
 	if c.parsedFormula == nil {
-		parser := chemicalFormulaParser{}
-		parsed := parser.parse(c.sanFormula)
+		parser := NewParser(c.sanFormula)
+		parsed := parser.parse()
 		c.parsedFormula = &parsed
 	}
 	return *c.parsedFormula
