@@ -37,8 +37,8 @@ func TestChemicalFormulaParser_parse(t *testing.T) {
 				{Label: "O", Amount: 5}},
 		},
 		{
-			name:    "all brackets",
-			formula: "{K2}2Mg2[(SO4)3Ho]2",
+			name:    "nested brackets",
+			formula: "(K2)2Mg2((SO4)3Ho)2",
 			expected: []Atom{
 				{Label: "K", Amount: 4},
 				{Label: "Mg", Amount: 2},
@@ -49,8 +49,8 @@ func TestChemicalFormulaParser_parse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := chemicalFormulaParser{}
-			result := v.parse(tt.formula)
+			v := NewParser(tt.formula)
+			result := v.parse()
 			if !slices.Equal(result, tt.expected) {
 				t.Errorf("parse() = %v, expected %v", result, tt.expected)
 			}

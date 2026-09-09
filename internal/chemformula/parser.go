@@ -2,36 +2,9 @@ package chemformula
 
 import (
 	"fmt"
-	"regexp"
-	"slices"
 	"strconv"
-
-	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
+	"unicode"
 )
-
-type regexes struct {
-	atomRegex        *regexp.Regexp
-	coefRegex        *regexp.Regexp
-	atomAndCoefRegex *regexp.Regexp
-	letterRegex      *regexp.Regexp
-	noLetterRegex    *regexp.Regexp
-	allowedSymbols   *regexp.Regexp
-	openerBrackets   []rune
-	closerBrackets   []rune
-	adductSymbols    []rune
-}
-
-var formRegexes regexes = regexes{
-	atomRegex:        regexp.MustCompile(`([A-Z][a-z]*)`),
-	coefRegex:        regexp.MustCompile(`((\d+(\.\d+)?)*)`),
-	atomAndCoefRegex: regexp.MustCompile(`([A-Z][a-z]*)((\d+(\.\d+)?)*)`),
-	letterRegex:      regexp.MustCompile(`[a-z]`),
-	noLetterRegex:    regexp.MustCompile(`[A-Za-z]`),
-	allowedSymbols:   regexp.MustCompile(`[^A-Za-z0-9.({[)}\]*·•]`),
-	openerBrackets:   []rune{'(', '[', '{'},
-	closerBrackets:   []rune{')', ']', '}'},
-	adductSymbols:    []rune{'*', '·', '•'},
-}
 
 type Atom struct {
 	Label  string
@@ -42,103 +15,217 @@ func (a Atom) String() string {
 	return fmt.Sprintf("'%s': %v", a.Label, a.Amount)
 }
 
-type chemicalFormulaParser struct{}
+type TokenType int
 
-func (p chemicalFormulaParser) parseToMap(formula string) (map[string]float64, int) {
-	tokens := []rune{}
-	mol := make(map[string]float64)
-	i := 0
+const (
+	TokenElement TokenType = iota
+	TokenNumber
+	TokenOpenParen
+	TokenCloseParen
+	TokenAdduct
+	TokenEOF
+)
 
-	for i < len(formula) {
-		token := rune(formula[i])
-		switch {
-
-		case slices.Contains(formRegexes.adductSymbols, token):
-			matches := formRegexes.coefRegex.FindStringSubmatch(formula[i+1:])
-			weight := 1.0
-
-			if len(matches) > 0 && matches[0] != "" {
-				weight, _ = strconv.ParseFloat(matches[0], 32)
-				i += len(matches[0])
-			}
-
-			submol, length := p.parseToMap("(" + formula[i+1:] + ")" + strconv.FormatFloat(weight, 'f', -1, 64))
-			mol = p.fuse(mol, submol, 1.0)
-			i += length + 1
-
-		case slices.Contains(formRegexes.closerBrackets, token):
-			matches := formRegexes.coefRegex.FindStringSubmatch(formula[i+1:])
-			weight := 1.0
-
-			if len(matches) > 0 && matches[0] != "" {
-				weight, _ = strconv.ParseFloat(matches[0], 64)
-				i += len(matches[0])
-			}
-
-			tokenStr := string(tokens)
-			submol := p.toMap(formRegexes.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1))
-			return p.fuse(mol, submol, weight), i
-
-		case slices.Contains(formRegexes.openerBrackets, token):
-			submol, length := p.parseToMap(formula[i+1:])
-			mol = p.fuse(mol, submol, 1.0)
-			i += length + 1
-
-		default:
-			tokens = append(tokens, token)
-		}
-		i++
-	}
-	tokenStr := string(tokens)
-	extractFromTokens := formRegexes.atomAndCoefRegex.FindAllStringSubmatch(tokenStr, -1)
-	fusedMap := p.fuse(mol, p.toMap(extractFromTokens), 1.0)
-
-	return fusedMap, i
+type Token struct {
+	Type  TokenType
+	Value string
 }
 
-func (p chemicalFormulaParser) fuse(mol1, mol2 map[string]float64, weight float64) map[string]float64 {
-	fused := make(map[string]float64)
-	for atom, count := range mol1 {
-		fused[atom] += count * weight
-	}
-	for atom, count := range mol2 {
-		fused[atom] += count * weight
-	}
-	return fused
+type Lexer struct {
+	input []rune
+	pos   int
 }
 
-func (p chemicalFormulaParser) toMap(matches [][]string) map[string]float64 {
-	result := make(map[string]float64)
+func NewLexer(input []rune) *Lexer {
+	return &Lexer{input: input, pos: 0}
+}
 
-	for _, match := range matches {
-		atom := match[1]
-		nStr := match[2]
-		var n float64 = 1.0
-		if nStr != "" {
-			var err error
-			n, err = strconv.ParseFloat(nStr, 64)
-			if err != nil {
-				n = 1.0
-			}
+func (l *Lexer) NextToken() Token {
+	if l.pos >= len(l.input) {
+		return Token{Type: TokenEOF}
+	}
+
+	ch := l.input[l.pos]
+
+	switch ch {
+	case '(':
+		l.pos++
+		return Token{Type: TokenOpenParen, Value: "("}
+	case ')':
+		l.pos++
+		return Token{Type: TokenCloseParen, Value: ")"}
+	case '*':
+		l.pos++
+		return Token{Type: TokenAdduct, Value: "*"}
+	}
+	if unicode.IsDigit(ch) || ch == '.' {
+		return l.readNumber()
+	}
+
+	if unicode.IsUpper(ch) {
+		return l.readElement()
+	}
+
+	l.pos++
+	return l.NextToken()
+}
+
+func (l *Lexer) readElement() Token {
+	start := l.pos
+	l.pos++
+
+	for l.pos < len(l.input) && unicode.IsLower(rune(l.input[l.pos])) {
+		l.pos++
+	}
+
+	return Token{Type: TokenElement, Value: string(l.input[start:l.pos])}
+}
+
+func (l *Lexer) readNumber() Token {
+	start := l.pos
+
+	for l.pos < len(l.input) {
+		ch := rune(l.input[l.pos])
+		if unicode.IsDigit(ch) || ch == '.' {
+			l.pos++
+		} else {
+			break
 		}
-		result[atom] += n
+	}
+
+	return Token{Type: TokenNumber, Value: string(l.input[start:l.pos])}
+}
+
+type Parser struct {
+	lexer   *Lexer
+	current Token
+}
+
+func NewParser(formula string) *Parser {
+	lexer := NewLexer([]rune(formula))
+	return &Parser{
+		lexer:   lexer,
+		current: lexer.NextToken(),
+	}
+}
+
+func (p *Parser) advance() {
+	p.current = p.lexer.NextToken()
+}
+
+func (p *Parser) parse() []Atom {
+	atomCounts := make(map[string]float64, len(p.lexer.input)/2)
+	elementOrder := []string{}
+	seen := make(map[string]bool)
+
+	p.parseFormula(atomCounts, &elementOrder, &seen, 1.0)
+
+	var result []Atom
+	for _, label := range elementOrder {
+		if count, exists := atomCounts[label]; exists {
+			result = append(result, Atom{Label: label, Amount: count})
+		}
 	}
 
 	return result
 }
 
-func (p chemicalFormulaParser) order(formula string, parsed map[string]float64) []Atom {
-	ret := make([]Atom, len(parsed))
-	atomMatch := formRegexes.atomRegex.FindAllString(formula, -1)
-	unique := utils.UniqueElems(atomMatch)
-	for i, match := range unique {
-		ret[i] = Atom{Label: match, Amount: parsed[match]}
+func (p *Parser) parseFormula(atomCounts map[string]float64,
+	elementOrder *[]string,
+	seen *map[string]bool,
+	multiplier float64) {
+	for p.current.Type != TokenEOF {
+		switch p.current.Type {
+		case TokenElement:
+			element := p.current.Value
+			p.advance()
+
+			count := 1.0
+			if p.current.Type == TokenNumber {
+				count, _ = strconv.ParseFloat(p.current.Value, 64)
+				p.advance()
+			}
+
+			atomCounts[element] += count * multiplier
+
+			if !(*seen)[element] {
+				*elementOrder = append(*elementOrder, element)
+				(*seen)[element] = true
+			}
+
+		case TokenOpenParen:
+			p.advance()
+			subCounts := make(map[string]float64)
+			p.parseGroup(subCounts, elementOrder, seen, 1.0)
+
+			groupMultiplier := 1.0
+			if p.current.Type == TokenNumber {
+				groupMultiplier, _ = strconv.ParseFloat(p.current.Value, 64)
+				p.advance()
+			}
+
+			for label, count := range subCounts {
+				atomCounts[label] += count * groupMultiplier * multiplier
+			}
+
+		case TokenAdduct:
+			p.advance()
+
+			adductMultiplier := 1.0
+			if p.current.Type == TokenNumber {
+				adductMultiplier, _ = strconv.ParseFloat(p.current.Value, 64)
+				p.advance()
+			}
+
+			p.parseFormula(atomCounts, elementOrder, seen, adductMultiplier)
+
+		default:
+			p.advance()
+		}
 	}
-	return ret
 }
 
-func (p chemicalFormulaParser) parse(formula string) []Atom {
-	parsed, _ := p.parseToMap(formula)
-	res := p.order(formula, parsed)
-	return res
+func (p *Parser) parseGroup(atomCounts map[string]float64, elementOrder *[]string, seen *map[string]bool, multiplier float64) {
+	for p.current.Type != TokenEOF {
+		switch p.current.Type {
+		case TokenCloseParen:
+			p.advance()
+			return
+
+		case TokenElement:
+			element := p.current.Value
+			p.advance()
+
+			count := 1.0
+			if p.current.Type == TokenNumber {
+				count, _ = strconv.ParseFloat(p.current.Value, 64)
+				p.advance()
+			}
+
+			atomCounts[element] += count * multiplier
+
+			if !(*seen)[element] {
+				*elementOrder = append(*elementOrder, element)
+				(*seen)[element] = true
+			}
+
+		case TokenOpenParen:
+			p.advance()
+			subCounts := make(map[string]float64)
+			p.parseGroup(subCounts, elementOrder, seen, 1.0)
+
+			groupMultiplier := 1.0
+			if p.current.Type == TokenNumber {
+				groupMultiplier, _ = strconv.ParseFloat(p.current.Value, 64)
+				p.advance()
+			}
+
+			for label, count := range subCounts {
+				atomCounts[label] += count * groupMultiplier * multiplier
+			}
+
+		default:
+			p.advance()
+		}
+	}
 }
