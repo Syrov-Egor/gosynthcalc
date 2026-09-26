@@ -38,6 +38,7 @@ func init() {
 
 func sanitize(formula string) string {
 	var res strings.Builder
+	res.Grow(len(formula))
 	for _, r := range formula {
 		switch r {
 		case '[', '{':
