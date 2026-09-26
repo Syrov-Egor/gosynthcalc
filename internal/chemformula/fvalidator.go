@@ -133,32 +133,32 @@ func isValidElement(tok string) bool {
 }
 
 func invalidAtoms(text string) []string {
-	var res []string
+	var result []string
 	for i := 0; i < len(text); {
-		c := text[i]
-		if c >= 'A' && c <= 'Z' {
+		char := text[i]
+		if char >= 'A' && char <= 'Z' {
 			j := i + 1
 			for j < len(text) && text[j] >= 'a' && text[j] <= 'z' {
 				j++
 			}
-			tok := text[i:j]
-			if !isValidElement(tok) {
-				dup := slices.Contains(res, tok)
-				if !dup {
-					res = append(res, tok)
+			token := text[i:j]
+			if !isValidElement(token) {
+				duplicate := slices.Contains(result, token)
+				if !duplicate {
+					result = append(result, token)
 				}
 			}
 			i = j
-		} else if c >= 'a' && c <= 'z' {
-			tok := text[i : i+1]
-			dup := slices.Contains(res, tok)
-			if !dup {
-				res = append(res, tok)
+		} else if char >= 'a' && char <= 'z' {
+			token := text[i : i+1]
+			duplicate := slices.Contains(result, token)
+			if !duplicate {
+				result = append(result, token)
 			}
 			i++
 		} else {
 			i++
 		}
 	}
-	return res
+	return result
 }
