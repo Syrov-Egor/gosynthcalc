@@ -5,45 +5,82 @@ import (
 	"strings"
 )
 
+var (
+	allowedASCII [128]bool
+	allowedExtra = map[rune]bool{
+		'·': true, // U+00B7
+		'•': true, // U+2022
+	}
+)
+
+func init() {
+	for c := 'a'; c <= 'z'; c++ {
+		allowedASCII[c] = true
+	}
+	for c := 'A'; c <= 'Z'; c++ {
+		allowedASCII[c] = true
+	}
+	for c := '0'; c <= '9'; c++ {
+		allowedASCII[c] = true
+	}
+	for _, c := range ".,({[)}]*=+" {
+		allowedASCII[c] = true
+	}
+}
+
+func sanitize(reaction string) string {
+	var res strings.Builder
+	res.Grow(len(reaction))
+	for _, r := range reaction {
+		switch r {
+		case ' ':
+		default:
+			res.WriteRune(r)
+		}
+	}
+	sanitized := res.String()
+	for _, sep := range reactionSymbols.reactionSeparators {
+		strings.ReplaceAll(sanitized, sep, "=")
+	}
+	return sanitized
+}
+
 type reactionValidator struct {
 	reaction string
 }
 
-func (v reactionValidator) emptyReaction() bool {
-	return v.reaction == ""
-}
-
-func (v reactionValidator) invalidCharacters() []string {
-	return reactionRegexes.allowedSymbols.FindAllString(v.reaction, -1)
-}
-
-func (v reactionValidator) noRPSeparator(decomp reactionDecomposer) bool {
-	return decomp.separator == ""
-}
-
-func (v reactionValidator) noReacSeparator() bool {
-	return !strings.Contains(v.reaction, reactionRegexes.reactantSeparator)
-}
-
 func (v reactionValidator) validate() (*reactionDecomposer, error) {
-	var err error
+
+	if v.reaction == "" {
+		return nil, fmt.Errorf("empty reaction string")
+	}
+
+	invalidCharacters := make([]rune, 0)
+	for _, r := range v.reaction {
+		if r < 128 {
+			if !allowedASCII[r] {
+				invalidCharacters = append(invalidCharacters, r)
+			}
+		} else if !allowedExtra[r] {
+			invalidCharacters = append(invalidCharacters, r)
+		}
+	}
+
+	if len(invalidCharacters) > 0 {
+		return nil, fmt.Errorf("there are invalid character(s) %s in the reaction '%s'", invalidCharacters, v.reaction)
+	}
+
 	decomp, err := newReactionDecomposer(v.reaction)
 	if err != nil {
 		return nil, err
 	}
 
-	switch {
-	case v.emptyReaction():
-		err = fmt.Errorf("empty reaction string")
-	case len(v.invalidCharacters()) > 0:
-		err = fmt.Errorf("there are invalid character(s) %s in the reaction '%s'",
-			v.invalidCharacters(), v.reaction)
-	case v.noRPSeparator(*decomp):
-		err = fmt.Errorf("no separator between reactants and products: %s in the reaction '%s'",
-			reactionRegexes.reactionSeparators, v.reaction)
-	case v.noReacSeparator():
-		err = fmt.Errorf("no separators between compounds: %s in the reaction '%s'",
-			reactionRegexes.reactantSeparator, v.reaction)
+	if decomp.separator == "" {
+		return nil, fmt.Errorf("no separator between reactants and products: %s in the reaction '%s'", reactionSymbols.reactionSeparators, v.reaction)
+	}
+
+	if !strings.Contains(v.reaction, reactionSymbols.reactantSeparator) {
+		return nil, fmt.Errorf("no separators between compounds: %s in the reaction '%s'", reactionSymbols.reactantSeparator, v.reaction)
 	}
 
 	return decomp, err

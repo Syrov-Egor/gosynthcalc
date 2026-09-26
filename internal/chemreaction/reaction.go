@@ -60,8 +60,8 @@ type ReacOptions struct {
 }
 
 func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReaction, error) {
-	newReaction := strings.ReplaceAll(reaction, " ", "")
-	validator := reactionValidator{reaction: newReaction}
+	sanReaction := sanitize(reaction)
+	validator := reactionValidator{reaction: sanReaction}
 	decomp, err := validator.validate()
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReac
 	}
 
 	return &ChemicalReaction{
-		reaction:   newReaction,
+		reaction:   reaction,
 		decomposer: decomp,
 		reacOpts:   reacOpt,
 	}, nil
@@ -267,7 +267,7 @@ func (r *ChemicalReaction) generateFinalReaction(coefs []float64) string {
 	joined := strings.Join(final[:len(final)-1], "")
 	replaced := utils.ReplaceNthOccurrence(
 		joined,
-		reactionRegexes.reactantSeparator,
+		reactionSymbols.reactantSeparator,
 		r.decomposer.separator,
 		r.decomposer.separatorPos,
 	)

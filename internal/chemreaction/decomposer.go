@@ -2,20 +2,17 @@ package chemreaction
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
 )
 
-type regexes struct {
-	allowedSymbols     *regexp.Regexp
+type symbols struct {
 	reactionSeparators []string
 	reactantSeparator  string
 }
 
-var reactionRegexes regexes = regexes{
-	allowedSymbols: regexp.MustCompile(`[^a-zA-Z0-9.({[)}\]*·•=<\->→⇄+]`),
+var reactionSymbols symbols = symbols{
 	reactionSeparators: []string{
 		"==",
 		"=",
@@ -53,8 +50,8 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 	}
 
 	separator := extractSeparator(reaction)
-	initReactants := strings.Split(strings.Split(reaction, separator)[0], reactionRegexes.reactantSeparator)
-	initProducts := strings.Split(strings.Split(reaction, separator)[1], reactionRegexes.reactantSeparator)
+	initReactants := strings.Split(strings.Split(reaction, separator)[0], reactionSymbols.reactantSeparator)
+	initProducts := strings.Split(strings.Split(reaction, separator)[1], reactionSymbols.reactantSeparator)
 	splitted := []compound{}
 	for i, form := range append(initReactants, initProducts...) {
 		if len(form) == 0 {
@@ -86,7 +83,7 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 }
 
 func extractSeparator(reaction string) string {
-	for _, sep := range reactionRegexes.reactionSeparators {
+	for _, sep := range reactionSymbols.reactionSeparators {
 		if strings.Contains(reaction, sep) {
 			splitted := strings.Split(reaction, sep)
 			if splitted[0] != "" && splitted[1] != "" {
