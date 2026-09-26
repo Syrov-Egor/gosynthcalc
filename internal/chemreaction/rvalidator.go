@@ -40,7 +40,7 @@ func sanitize(reaction string) string {
 	}
 	sanitized := res.String()
 	for _, sep := range reactionSymbols.reactionSeparators {
-		sanitized = strings.ReplaceAll(sanitized, sep, "=")
+		sanitized = strings.ReplaceAll(sanitized, sep, DefaultReactionSeparator)
 	}
 	return sanitized
 }
@@ -75,13 +75,9 @@ func (v reactionValidator) validate() (*reactionDecomposer, error) {
 		return nil, err
 	}
 
-	if decomp.separator == "" {
-		return nil, fmt.Errorf("no separator between reactants and products: %s in the reaction '%s'", reactionSymbols.reactionSeparators, v.reaction)
-	}
-
 	if !strings.Contains(v.reaction, reactionSymbols.reactantSeparator) {
 		return nil, fmt.Errorf("no separators between compounds: %s in the reaction '%s'", reactionSymbols.reactantSeparator, v.reaction)
 	}
 
-	return decomp, err
+	return decomp, nil
 }

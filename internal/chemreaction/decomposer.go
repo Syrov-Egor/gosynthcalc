@@ -36,7 +36,6 @@ type rnCoef struct {
 }
 
 type reactionDecomposer struct {
-	separator    string
 	separatorPos int
 	initCoefs    []float64
 	compounds    []string
@@ -49,10 +48,15 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 		return nil, fmt.Errorf("empty or invalid reaction string")
 	}
 
-	separator := extractSeparator(reaction)
-	initReactants := strings.Split(strings.Split(reaction, separator)[0], reactionSymbols.reactantSeparator)
-	initProducts := strings.Split(strings.Split(reaction, separator)[1], reactionSymbols.reactantSeparator)
+	reactantsPart, productsPart, found := strings.Cut(reaction, DefaultReactionSeparator)
+	if !found || reactantsPart == "" || productsPart == "" {
+		return nil, fmt.Errorf("no separator between reactants and products: %s in the reaction '%s'",
+			reactionSymbols.reactionSeparators, reaction)
+	}
+	initReactants := strings.Split(reactantsPart, reactionSymbols.reactantSeparator)
+	initProducts := strings.Split(productsPart, reactionSymbols.reactantSeparator)
 	splitted := []compound{}
+
 	for i, form := range append(initReactants, initProducts...) {
 		if len(form) == 0 {
 			return nil, fmt.Errorf("compound %d is empty, maybe there are two adjacent +?", i+1)
@@ -63,6 +67,7 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 		}
 		splitted = append(splitted, spltCompound)
 	}
+
 	initCoefs := make([]float64, len(splitted))
 	compounds := make([]string, len(splitted))
 	for i, comp := range splitted {
@@ -73,25 +78,12 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 	separatorPos := len(initReactants)
 
 	return &reactionDecomposer{
-		separator:    separator,
 		separatorPos: separatorPos,
 		initCoefs:    initCoefs,
 		compounds:    compounds,
 		reactants:    compounds[:separatorPos],
 		products:     compounds[separatorPos:],
 	}, nil
-}
-
-func extractSeparator(reaction string) string {
-	for _, sep := range reactionSymbols.reactionSeparators {
-		if strings.Contains(reaction, sep) {
-			splitted := strings.Split(reaction, sep)
-			if splitted[0] != "" && splitted[1] != "" {
-				return sep
-			}
-		}
-	}
-	return ""
 }
 
 func splitCoefFromFormula(formula string) (compound, error) {

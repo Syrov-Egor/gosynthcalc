@@ -130,6 +130,18 @@ func TestReactionValidator_noRPSeparator(t *testing.T) {
 			reaction: "H2+O2->H2O",
 			wantErr:  false,
 		},
+		{
+			name:          "empty reactant side",
+			reaction:      "=H2O",
+			wantErr:       true,
+			errorContains: "no separator between reactants and products",
+		},
+		{
+			name:          "empty product side",
+			reaction:      "H2=",
+			wantErr:       true,
+			errorContains: "no separator between reactants and products",
+		},
 	}
 
 	for _, tt := range tests {
@@ -298,9 +310,6 @@ func TestReactionValidator_allReactionSeparators(t *testing.T) {
 			checkValidatorResult(t, decomp, err, false, "")
 			if decomp == nil {
 				return
-			}
-			if decomp.separator != "=" {
-				t.Errorf("separator = %q, expected %q after sanitization", decomp.separator, "=")
 			}
 			if !slices.Equal(decomp.reactants, []string{"H2", "O2"}) {
 				t.Errorf("reactants = %v, expected %v", decomp.reactants, []string{"H2", "O2"})

@@ -13,13 +13,14 @@ import (
 )
 
 const (
-	DefaultMode           Mode    = Balance
-	DefaultTarget         int     = 0
-	DefaultTargerMass     float64 = 1.0
-	DefaultIntify         bool    = true
-	DefaultPrecision      uint    = 8
-	DefaultPrintPrecision uint    = 4
-	DefaultTolerance      float64 = 1e-8
+	DefaultMode              Mode    = Balance
+	DefaultTarget            int     = 0
+	DefaultTargerMass        float64 = 1.0
+	DefaultIntify            bool    = true
+	DefaultPrecision         uint    = 8
+	DefaultPrintPrecision    uint    = 4
+	DefaultTolerance         float64 = 1e-8
+	DefaultReactionSeparator string  = "="
 )
 
 type ChemicalReaction struct {
@@ -268,7 +269,7 @@ func (r *ChemicalReaction) generateFinalReaction(coefs []float64) string {
 	replaced := utils.ReplaceNthOccurrence(
 		joined,
 		reactionSymbols.reactantSeparator,
-		r.decomposer.separator,
+		DefaultReactionSeparator,
 		r.decomposer.separatorPos,
 	)
 
