@@ -40,7 +40,7 @@ func sanitize(reaction string) string {
 	}
 	sanitized := res.String()
 	for _, sep := range reactionSymbols.reactionSeparators {
-		strings.ReplaceAll(sanitized, sep, "=")
+		sanitized = strings.ReplaceAll(sanitized, sep, "=")
 	}
 	return sanitized
 }
@@ -67,7 +67,7 @@ func (v reactionValidator) validate() (*reactionDecomposer, error) {
 	}
 
 	if len(invalidCharacters) > 0 {
-		return nil, fmt.Errorf("there are invalid character(s) %s in the reaction '%s'", invalidCharacters, v.reaction)
+		return nil, fmt.Errorf("there are invalid character(s) %s in the reaction '%s'", string(invalidCharacters), v.reaction)
 	}
 
 	decomp, err := newReactionDecomposer(v.reaction)
