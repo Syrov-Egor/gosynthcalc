@@ -12,6 +12,16 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+const (
+	DefaultMode           Mode    = Balance
+	DefaultTarget         int     = 0
+	DefaultTargerMass     float64 = 1.0
+	DefaultIntify         bool    = true
+	DefaultPrecision      uint    = 8
+	DefaultPrintPrecision uint    = 4
+	DefaultTolerance      float64 = 1e-8
+)
+
 type ChemicalReaction struct {
 	reaction       string
 	reacOpts       ReacOptions
@@ -50,7 +60,7 @@ type ReacOptions struct {
 }
 
 func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReaction, error) {
-	newReaction := strings.Replace(reaction, " ", "", -1)
+	newReaction := strings.ReplaceAll(reaction, " ", "")
 	validator := reactionValidator{reaction: newReaction}
 	decomp, err := validator.validate()
 	if err != nil {
@@ -60,12 +70,12 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReac
 	var reacOpt ReacOptions
 	if options == nil {
 		reacOpt = ReacOptions{
-			Rmode:      Balance,
-			Target:     0,
-			TargerMass: 1.0,
-			Intify:     true,
-			Precision:  8,
-			Tolerance:  1e-8,
+			Rmode:      DefaultMode,
+			Target:     DefaultTarget,
+			TargerMass: DefaultTargerMass,
+			Intify:     DefaultIntify,
+			Precision:  DefaultPrecision,
+			Tolerance:  DefaultTolerance,
 		}
 	} else {
 		reacOpt = options[0]
@@ -317,7 +327,7 @@ func (r *ChemicalReaction) Masses() ([]float64, error) {
 func (r *ChemicalReaction) Output(printPrecision ...uint) (crOutput, error) {
 	var pPrecision uint
 	if printPrecision == nil {
-		pPrecision = 4
+		pPrecision = DefaultPrintPrecision
 	} else {
 		pPrecision = printPrecision[0]
 	}
