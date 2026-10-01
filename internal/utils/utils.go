@@ -34,13 +34,31 @@ func SumFloatS(s []float64) float64 {
 	return sum
 }
 
-func RoundFloat(val float64, precision uint) float64 {
-	ratio := math.Pow(10, float64(precision))
+var pow10 = [23]float64{
+	1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
+	1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+}
+
+func roundByRatio(val, ratio float64) float64 {
 	return math.Round(val*ratio) / ratio
+}
+
+func RoundFloat(val float64, precision uint) float64 {
+	if precision < uint(len(pow10)) {
+		return roundByRatio(val, pow10[precision])
+	}
+	return roundByRatio(val, math.Pow(10, float64(precision)))
 }
 
 func RoundFloatS(s []float64, precision uint) []float64 {
 	res := make([]float64, len(s))
+	if precision < uint(len(pow10)) {
+		ratio := pow10[precision]
+		for i, val := range s {
+			res[i] = roundByRatio(val, ratio)
+		}
+		return res
+	}
 	for i, val := range s {
 		res[i] = RoundFloat(val, precision)
 	}
