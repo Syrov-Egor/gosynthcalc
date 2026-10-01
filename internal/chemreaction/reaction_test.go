@@ -3,6 +3,8 @@ package chemreaction
 import (
 	"slices"
 	"testing"
+
+	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
 func TestChemicalReacutionOutput(t *testing.T) {
@@ -164,5 +166,98 @@ func TestChemicalReaction_setCoefficientsRight(t *testing.T) {
 		t.Errorf("this test should give %v, got %v instead",
 			expected,
 			reac_coefs.Result)
+	}
+}
+
+func TestChemicalReaction_setCoefficientsInvalidatesCaches(t *testing.T) {
+	reactionStr := "H2+O2=H2O"
+	reac, err := NewChemicalReaction(reactionStr)
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+
+	if _, err := reac.Output(); err != nil {
+		t.Fatalf("Output() error: %v", err)
+	}
+
+	newCoefs := []float64{6, 3, 4}
+	if err := reac.SetCoefficients(newCoefs); err != nil {
+		t.Fatalf("SetCoefficients() error: %v", err)
+	}
+
+	newCoefs[0] = 999
+
+	coefs, err := reac.Coefficients()
+	if err != nil {
+		t.Fatalf("Coefficients() error: %v", err)
+	}
+	if !slices.Equal(coefs.Result, []float64{6, 3, 4}) {
+		t.Errorf("Coefficients() = %v, want [6 3 4]", coefs.Result)
+	}
+	if coefs.Method != "User" {
+		t.Errorf("Method = %q, want \"User\"", coefs.Method)
+	}
+
+	expectedNorm := []float64{1.5, 0.75, 1}
+	norm, err := reac.NormCoefficients()
+	if err != nil {
+		t.Fatalf("NormCoefficients() error: %v", err)
+	}
+	if !slices.Equal(norm, expectedNorm) {
+		t.Errorf("NormCoefficients() = %v, want %v", norm, expectedNorm)
+	}
+
+	fin, err := reac.FinalReaction()
+	if err != nil {
+		t.Fatalf("FinalReaction() error: %v", err)
+	}
+	if fin != "6H2+3O2=4H2O" {
+		t.Errorf("FinalReaction() = %q, want %q", fin, "6H2+3O2=4H2O")
+	}
+
+	finNorm, err := reac.FinalReactionNorm()
+	if err != nil {
+		t.Fatalf("FinalReactionNorm() error: %v", err)
+	}
+	if finNorm != "1.5H2+0.75O2=H2O" {
+		t.Errorf("FinalReactionNorm() = %q, want %q", finNorm, "1.5H2+0.75O2=H2O")
+	}
+
+	molars, err := reac.MolarMasses()
+	if err != nil {
+		t.Fatalf("MolarMasses() error: %v", err)
+	}
+	target := 2
+	nu := 1.0 / molars[target]
+	expectedMasses := make([]float64, len(molars))
+	for i, molar := range molars {
+		expectedMasses[i] = utils.RoundFloat(molar*nu*expectedNorm[i], 8)
+	}
+	masses, err := reac.Masses()
+	if err != nil {
+		t.Fatalf("Masses() error: %v", err)
+	}
+	if !slices.Equal(masses, expectedMasses) {
+		t.Errorf("Masses() = %v, want %v", masses, expectedMasses)
+	}
+
+	out, err := reac.Output()
+	if err != nil {
+		t.Fatalf("Output() error: %v", err)
+	}
+	if !slices.Equal(out.Coefficients, []float64{6, 3, 4}) {
+		t.Errorf("Output().Coefficients = %v, want [6 3 4]", out.Coefficients)
+	}
+	if !slices.Equal(out.NormCoefficients, expectedNorm) {
+		t.Errorf("Output().NormCoefficients = %v, want %v", out.NormCoefficients, expectedNorm)
+	}
+	if out.FinalReaction != "6H2+3O2=4H2O" {
+		t.Errorf("Output().FinalReaction = %q, want %q", out.FinalReaction, "6H2+3O2=4H2O")
+	}
+	if out.FinalReactionNorm != "1.5H2+0.75O2=H2O" {
+		t.Errorf("Output().FinalReactionNorm = %q, want %q", out.FinalReactionNorm, "1.5H2+0.75O2=H2O")
+	}
+	if !slices.Equal(out.Masses, expectedMasses) {
+		t.Errorf("Output().Masses = %v, want %v", out.Masses, expectedMasses)
 	}
 }

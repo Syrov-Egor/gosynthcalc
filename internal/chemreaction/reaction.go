@@ -3,6 +3,7 @@ package chemreaction
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -214,7 +215,11 @@ func (r *ChemicalReaction) SetCoefficients(coefs []float64) error {
 		}
 	}
 
-	r.coefs = &MethodResult{Method: "User", Result: coefs}
+	r.coefs = &MethodResult{Method: "User", Result: slices.Clone(coefs)}
+	r.normCoefs = nil
+	r.finalReac = nil
+	r.finalReacNorm = nil
+	r.masses = nil
 
 	return nil
 }
