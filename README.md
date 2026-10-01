@@ -49,15 +49,15 @@ And we get our output in the terminal:
 	is balanced: true
 	final reaction: 8BaCO3+2Y2(CO3)3+12CuCO3+O2=4YBa2Cu3O7+26CO2
 	final reaction normalized: 2BaCO3+0.5Y2(CO3)3+3CuCO3+0.25O2=YBa2Cu3O7+6.5CO2
-	molar masses: [197.335 357.8357 123.554 31.998 666.1908 44.009]
+	molar masses: [197.3350 357.8357 123.5540 31.9980 666.1908 44.0090]
 	target: YBa2Cu3O7
-	masses: [1.7773 0.8057 1.6692 0.036 3 1.2882]
-	BaCO3      M = 197.335   g/mol  m = 1.7773  g
+	masses: [1.7773 0.8057 1.6692 0.0360 3.0000 1.2882]
+	BaCO3      M = 197.3350  g/mol  m = 1.7773  g
 	Y2(CO3)3   M = 357.8357  g/mol  m = 0.8057  g
-	CuCO3      M = 123.554   g/mol  m = 1.6692  g
-	O2         M = 31.998    g/mol  m = 0.036   g
-	YBa2Cu3O7  M = 666.1908  g/mol  m = 3       g
-	CO2        M = 44.009    g/mol  m = 1.2882  g
+	CuCO3      M = 123.5540  g/mol  m = 1.6692  g
+	O2         M = 31.9980   g/mol  m = 0.0360  g
+	YBa2Cu3O7  M = 666.1908  g/mol  m = 3.0000  g
+	CO2        M = 44.0090   g/mol  m = 1.2882  g
 ```
 
 ## Features
