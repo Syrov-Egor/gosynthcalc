@@ -22,17 +22,17 @@ algorithm: general pseudoinverse
 is balanced: true
 final reaction: 1954Fe2O3+1854C=518Fe3O4+1093FeO+1096Fe+55Fe3C+901CO+898CO2
 final reaction normalized: 3.77220077Fe2O3+3.57915058C=Fe3O4+2.11003861FeO+2.11583012Fe+0.10617761Fe3C+1.73938224CO+1.73359073CO2
-molar masses: [159.687 12.011 231.531 71.844 55.845 179.546 28.01 44.009]
+molar masses: [159.6870 12.0110 231.5310 71.8440 55.8450 179.5460 28.0100 44.0090]
 target: Fe3O4
-masses: [2.6017 0.1857 1 0.6547 0.5103 0.0823 0.2104 0.3295]
-Fe2O3  M = 159.687  g/mol  m = 2.6017  g
-C      M = 12.011   g/mol  m = 0.1857  g
-Fe3O4  M = 231.531  g/mol  m = 1       g
-FeO    M = 71.844   g/mol  m = 0.6547  g
-Fe     M = 55.845   g/mol  m = 0.5103  g
-Fe3C   M = 179.546  g/mol  m = 0.0823  g
-CO     M = 28.01    g/mol  m = 0.2104  g
-CO2    M = 44.009   g/mol  m = 0.3295  g`
+masses: [2.6017 0.1857 1.0000 0.6547 0.5103 0.0823 0.2104 0.3295]
+Fe2O3  M = 159.6870  g/mol  m = 2.6017  g
+C      M = 12.0110   g/mol  m = 0.1857  g
+Fe3O4  M = 231.5310  g/mol  m = 1.0000  g
+FeO    M = 71.8440   g/mol  m = 0.6547  g
+Fe     M = 55.8450   g/mol  m = 0.5103  g
+Fe3C   M = 179.5460  g/mol  m = 0.0823  g
+CO     M = 28.0100   g/mol  m = 0.2104  g
+CO2    M = 44.0090   g/mol  m = 0.3295  g`
 	if got.String() != expected {
 		t.Errorf("Output() expected '%s', got '%s'", expected, got)
 	}

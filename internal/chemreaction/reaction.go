@@ -378,9 +378,10 @@ func (r *ChemicalReaction) Output(printPrecision ...uint) (crOutput, error) {
 		IsBalanced:        r.IsBalanced(),
 		FinalReaction:     fReaction,
 		FinalReactionNorm: nfReaction,
-		MolarMasses:       utils.RoundFloatS(mMasses, pPrecision),
+		MolarMasses:       mMasses,
 		Target:            r.decomposer.compounds[target],
-		Masses:            utils.RoundFloatS(mass, pPrecision),
+		Masses:            mass,
+		printPrecision:    pPrecision,
 	}
 	return crO, nil
 }
@@ -399,6 +400,7 @@ type crOutput struct {
 	MolarMasses       []float64
 	Target            string
 	Masses            []float64
+	printPrecision    uint
 }
 
 func (o crOutput) String() string {
@@ -413,18 +415,31 @@ func (o crOutput) String() string {
 	fmt.Fprintln(&out, "is balanced:", o.IsBalanced)
 	fmt.Fprintln(&out, "final reaction:", o.FinalReaction)
 	fmt.Fprintln(&out, "final reaction normalized:", o.FinalReactionNorm)
-	fmt.Fprintln(&out, "molar masses:", o.MolarMasses)
+	fmt.Fprintln(&out, "molar masses:", formatFloats(o.MolarMasses, o.printPrecision))
 	fmt.Fprintln(&out, "target:", o.Target)
-	fmt.Fprintln(&out, "masses:", o.Masses)
+	fmt.Fprintln(&out, "masses:", formatFloats(o.Masses, o.printPrecision))
 
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 
 	for i, comp := range o.Formulas {
-		fmt.Fprintf(w, "%s\tM = %v\tg/mol\tm = %v\tg\n",
-			comp, o.MolarMasses[i], o.Masses[i])
+		fmt.Fprintf(w, "%s\tM = %.*f\tg/mol\tm = %.*f\tg\n",
+			comp, o.printPrecision, o.MolarMasses[i], o.printPrecision, o.Masses[i])
 	}
 	w.Flush()
 
 	return out.String() + strings.TrimSuffix(buf.String(), "\n")
+}
+
+func formatFloats(vals []float64, precision uint) string {
+	var sb strings.Builder
+	sb.WriteByte('[')
+	for i, val := range vals {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		fmt.Fprintf(&sb, "%.*f", precision, val)
+	}
+	sb.WriteByte(']')
+	return sb.String()
 }
