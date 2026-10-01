@@ -106,34 +106,49 @@ func (c *ChemicalFormula) Output(printPrecision ...uint) cfOutput {
 
 	oxides, _ := c.OxidePercent()
 	cfO := cfOutput{
-		Formula:       c.formula,
-		ParsedFormula: c.ParsedFormula(),
-		MolarMass:     utils.RoundFloat(c.MolarMass(), pPrecision),
-		MassPercent:   roundAtomS(c.MassPercent(), pPrecision),
-		AtomicPercent: roundAtomS(c.AtomicPercent(), pPrecision),
-		OxidePercent:  roundAtomS(oxides, pPrecision),
+		Formula:        c.formula,
+		ParsedFormula:  c.ParsedFormula(),
+		MolarMass:      c.MolarMass(),
+		MassPercent:    c.MassPercent(),
+		AtomicPercent:  c.AtomicPercent(),
+		OxidePercent:   oxides,
+		printPrecision: pPrecision,
 	}
 
 	return cfO
 }
 
 type cfOutput struct {
-	Formula       string
-	ParsedFormula []Atom
-	MolarMass     float64
-	MassPercent   []Atom
-	AtomicPercent []Atom
-	OxidePercent  []Atom
+	Formula        string
+	ParsedFormula  []Atom
+	MolarMass      float64
+	MassPercent    []Atom
+	AtomicPercent  []Atom
+	OxidePercent   []Atom
+	printPrecision uint
 }
 
 func (o cfOutput) String() string {
 	var sb strings.Builder
 	fmt.Fprintln(&sb, "formula:", o.Formula)
 	fmt.Fprintln(&sb, "parsed formula:", o.ParsedFormula)
-	fmt.Fprintln(&sb, "molar mass:", o.MolarMass)
-	fmt.Fprintln(&sb, "mass percent:", o.MassPercent)
-	fmt.Fprintln(&sb, "atomic percent:", o.AtomicPercent)
-	fmt.Fprint(&sb, "oxide percent: ", o.OxidePercent)
+	fmt.Fprintf(&sb, "molar mass: %.*f\n", o.printPrecision, o.MolarMass)
+	fmt.Fprintln(&sb, "mass percent:", formatAtoms(o.MassPercent, o.printPrecision))
+	fmt.Fprintln(&sb, "atomic percent:", formatAtoms(o.AtomicPercent, o.printPrecision))
+	fmt.Fprint(&sb, "oxide percent: ", formatAtoms(o.OxidePercent, o.printPrecision))
+	return sb.String()
+}
+
+func formatAtoms(atoms []Atom, precision uint) string {
+	var sb strings.Builder
+	sb.WriteByte('[')
+	for i, atom := range atoms {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		fmt.Fprintf(&sb, "'%s': %.*f", atom.Label, precision, atom.Amount)
+	}
+	sb.WriteByte(']')
 	return sb.String()
 }
 
