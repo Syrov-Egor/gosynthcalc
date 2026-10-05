@@ -292,13 +292,11 @@ func (b *balancingAlgos) combinatorial(ctx context.Context, maxCoef uint) []floa
 	combinations := gen.generate(ctx, numWorkers)
 
 	resultChan := make(chan []int, 1)
-	var activeWorkers int32
+	var activeWorkers atomic.Int32
 	var wg sync.WaitGroup
 
 	for range numWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			reacSum := make([]float64, b.ReactantRows)
 			prodSum := make([]float64, b.ProductRows)
 
@@ -318,7 +316,7 @@ func (b *balancingAlgos) combinatorial(ctx context.Context, maxCoef uint) []floa
 						default:
 						}
 
-						atomic.AddInt32(&activeWorkers, 1)
+						activeWorkers.Add(1)
 
 						reactantCoefs := arr[:b.SeparatorPos]
 						productCoefs := arr[b.SeparatorPos:]
@@ -333,11 +331,11 @@ func (b *balancingAlgos) combinatorial(ctx context.Context, maxCoef uint) []floa
 							default:
 							}
 						}
-						atomic.AddInt32(&activeWorkers, -1)
+						activeWorkers.Add(-1)
 					}
 				}
 			}
-		}()
+		})
 	}
 
 	go func() {
@@ -431,11 +429,4 @@ func findNonZeroRows(m *mat.Dense, tol float64) []int {
 	}
 
 	return nonZeroRows
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
