@@ -21,7 +21,7 @@ type ChemicalFormula struct {
 	molarMass     *float64
 	massPercent   *[]Atom
 	atomicPercent *[]Atom
-	oxidePercent  *[]Atom
+	oxidePercent  map[string][]Atom
 }
 
 func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, error) {
@@ -85,15 +85,25 @@ func (c *ChemicalFormula) AtomicPercent() []Atom {
 }
 
 func (c *ChemicalFormula) OxidePercent(inOxides ...string) ([]Atom, error) {
-	if c.oxidePercent == nil {
-		percent, err := molarMass{c.ParsedFormula()}.oxidePercent(inOxides...)
-		if err != nil {
-			return nil, err
-		}
-		percent = roundAtomS(percent, c.precision)
-		c.oxidePercent = &percent
+	key := oxideCacheKey(inOxides)
+	if cached, ok := c.oxidePercent[key]; ok {
+		return cached, nil
 	}
-	return *c.oxidePercent, nil
+
+	percent, err := molarMass{c.ParsedFormula()}.oxidePercent(inOxides...)
+	if err != nil {
+		return nil, err
+	}
+	percent = roundAtomS(percent, c.precision)
+	if c.oxidePercent == nil {
+		c.oxidePercent = make(map[string][]Atom)
+	}
+	c.oxidePercent[key] = percent
+	return percent, nil
+}
+
+func oxideCacheKey(inOxides []string) string {
+	return strings.Join(inOxides, "\x00")
 }
 
 func (c *ChemicalFormula) Output(printPrecision ...uint) cfOutput {
