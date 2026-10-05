@@ -247,11 +247,30 @@ func (r *ChemicalReaction) NormCoefficients() ([]float64, error) {
 }
 
 func (r *ChemicalReaction) IsBalanced() bool {
-	coefs, _ := r.Coefficients()
-	bal, _ := r.Balancer()
+	coefs, err := r.Coefficients()
+	if err != nil || coefs == nil {
+		return false
+	}
+	bal, err := r.Balancer()
+	if err != nil || bal == nil || bal.bAlgos == nil {
+		return false
+	}
+
+	reactantMatrix := bal.bAlgos.ReactantMatrix
+	productMatrix := bal.bAlgos.ProductMatrix
+	if reactantMatrix == nil || productMatrix == nil {
+		return false
+	}
+
+	_, reactantCols := reactantMatrix.Dims()
+	_, productCols := productMatrix.Dims()
+	if len(coefs.Result) != reactantCols+productCols {
+		return false
+	}
+
 	return isReactionBalanced(
-		bal.bAlgos.ReactantMatrix,
-		bal.bAlgos.ProductMatrix,
+		reactantMatrix,
+		productMatrix,
 		coefs.Result,
 		r.reacOpts.Tolerance,
 	)

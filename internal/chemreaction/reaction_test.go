@@ -129,6 +129,73 @@ func TestChemicalReaction_countValidationBoth(t *testing.T) {
 	}
 }
 
+func TestChemicalReaction_isBalancedElementValidationFailure(t *testing.T) {
+	// The oxygen element is only present in the reactants, so the
+	// coefficients can't be computed at all. IsBalanced() must report
+	// false instead of dereferencing the failed results.
+	reactionStr := "H2+O2=H2"
+	reac, err := NewChemicalReaction(reactionStr)
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+	if _, err := reac.Coefficients(); err == nil {
+		t.Fatalf("Coefficients() expected an error for %q", reactionStr)
+	}
+
+	if reac.IsBalanced() {
+		t.Errorf("IsBalanced() = true for %q, want false", reactionStr)
+	}
+}
+
+func TestChemicalReaction_isBalancedSolverFailure(t *testing.T) {
+	// Every element is present on both sides, but the only solution of the
+	// element balance system contains negative coefficients, so all solvers
+	// fail. IsBalanced() must report false instead of dereferencing the
+	// failed results.
+	reactionStr := "H2+H2O=H2O2"
+	reac, err := NewChemicalReaction(reactionStr)
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+	if _, err := reac.Coefficients(); err == nil {
+		t.Fatalf("Coefficients() expected an error for %q", reactionStr)
+	}
+
+	if reac.IsBalanced() {
+		t.Errorf("IsBalanced() = true for %q, want false", reactionStr)
+	}
+}
+
+func TestChemicalReaction_isBalancedCheckMode(t *testing.T) {
+	balanced := ReacOptions{
+		Rmode:      Check,
+		Target:     0,
+		TargerMass: 1.0,
+		Intify:     true,
+		Precision:  8,
+		Tolerance:  1e-8,
+	}
+
+	right, err := NewChemicalReaction("2H2+O2=2H2O", balanced)
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+	if !right.IsBalanced() {
+		t.Errorf("IsBalanced() = false for balanced reaction, want true")
+	}
+
+	wrong, err := NewChemicalReaction("H2+O2=H2O", balanced)
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+	if _, err := wrong.Coefficients(); err == nil {
+		t.Fatalf("Coefficients() expected an error for unbalanced reaction")
+	}
+	if wrong.IsBalanced() {
+		t.Errorf("IsBalanced() = true for unbalanced reaction, want false")
+	}
+}
+
 func TestChemicalReaction_setCoefficientsWronglen(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
 	reac, _ := NewChemicalReaction(reactionStr)
