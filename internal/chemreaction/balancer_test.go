@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -92,6 +93,120 @@ func TestBalancer_Comb(t *testing.T) {
 				inv)
 		}
 	}
+}
+
+func TestBalancer_IntifyDoesNotClampAboveLimit(t *testing.T) {
+	// The exact integer solution needs a coefficient above the supported
+	// limit (1_000_000). It must never be clamped down to the limit, because
+	// that silently unbalances the reaction and corrupts downstream masses.
+	reac, err := NewChemicalReaction("H+O2=H1000001O2")
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+
+	coefs, err := reac.Coefficients()
+	if err != nil {
+		t.Fatalf("Coefficients() error: %v", err)
+	}
+
+	want := []float64{1000001, 1, 1}
+	if !slices.Equal(coefs.Result, want) {
+		t.Errorf("Coefficients() = %v, want %v", coefs.Result, want)
+	}
+	if !reac.IsBalanced() {
+		t.Errorf("reaction H+O2=H1000001O2 with coefficients %v is not balanced", coefs.Result)
+	}
+}
+
+func TestBalancer_IntifyAtLimit(t *testing.T) {
+	// The exact integer solution at the supported limit must still be
+	// integerified instead of falling back to floating point coefficients.
+	reac, err := NewChemicalReaction("H+O2=H1000000O2")
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+
+	coefs, err := reac.Coefficients()
+	if err != nil {
+		t.Fatalf("Coefficients() error: %v", err)
+	}
+
+	want := []float64{1000000, 1, 1}
+	if !slices.Equal(coefs.Result, want) {
+		t.Errorf("Coefficients() = %v, want %v", coefs.Result, want)
+	}
+	if !reac.IsBalanced() {
+		t.Errorf("reaction H+O2=H1000000O2 with coefficients %v is not balanced", coefs.Result)
+	}
+}
+
+func TestBalancer_intifyCoefsPreservesUnrepresentableValues(t *testing.T) {
+	reac, err := NewChemicalReaction("H+O2=H2O")
+	if err != nil {
+		t.Fatalf("NewChemicalReaction() error: %v", err)
+	}
+	bal, err := reac.Balancer()
+	if err != nil {
+		t.Fatalf("Balancer() error: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		coefs []float64
+		want  []float64
+	}{
+		{
+			name:  "below the limit",
+			coefs: []float64{2, 1, 2},
+			want:  []float64{2, 1, 2},
+		},
+		{
+			name:  "at the limit",
+			coefs: []float64{1000000, 1, 1},
+			want:  []float64{1000000, 1, 1},
+		},
+		{
+			name:  "above the limit keeps validated floats",
+			coefs: []float64{1000001, 1, 1},
+			want:  []float64{1000001, 1, 1},
+		},
+		{
+			name:  "non finite value keeps validated floats",
+			coefs: []float64{math.NaN(), 1, 1},
+			want:  []float64{math.NaN(), 1, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := slices.Clone(tt.coefs)
+			got := bal.intifyCoefs(input, bal.maxDenom)
+			if !equalCoefs(got, tt.want) {
+				t.Errorf("intifyCoefs(%v) = %v, want %v", tt.coefs, got, tt.want)
+			}
+			if !equalCoefs(input, tt.coefs) {
+				t.Errorf("intifyCoefs mutated its input: got %v, want %v", input, tt.coefs)
+			}
+		})
+	}
+}
+
+func equalCoefs(got, want []float64) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if math.IsNaN(want[i]) {
+			if !math.IsNaN(got[i]) {
+				return false
+			}
+			continue
+		}
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func parseReactionsCSV(filename string) ([]reactionData, error) {

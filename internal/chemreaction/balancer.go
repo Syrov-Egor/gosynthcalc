@@ -3,6 +3,7 @@ package chemreaction
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 	"gonum.org/v1/gonum/floats"
@@ -53,8 +54,15 @@ func (b *balancer) intifyCoefs(coefs []float64, limit int) []float64 {
 	denominators := make([]int64, len(coefs))
 
 	for i, coef := range coefs {
-		fractions[i] = utils.NewSimpleFraction(coef, int64(b.maxDenom))
-		denominators[i] = fractions[i].Den
+		if math.IsNaN(coef) || math.IsInf(coef, 0) || math.Abs(coef) > float64(limit) {
+			return initialCoefficients
+		}
+		frac := utils.NewSimpleFraction(coef, int64(b.maxDenom))
+		if frac.Den == 0 {
+			return initialCoefficients
+		}
+		fractions[i] = frac
+		denominators[i] = frac.Den
 	}
 
 	lcm := utils.FindLCMSliceInt64(denominators)
@@ -64,9 +72,6 @@ func (b *balancer) intifyCoefs(coefs []float64, limit int) []float64 {
 
 	vals := make([]int64, len(fractions))
 	for i, frac := range fractions {
-		if frac.Den == 0 {
-			return initialCoefficients
-		}
 		vals[i] = frac.Num * (lcm / frac.Den)
 
 		if vals[i] < 0 && frac.Num > 0 {
@@ -147,21 +152,28 @@ func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef
 	coefficients = utils.RoundFloatS(coefficients, b.precision+2)
 	_, matrLength := b.reactionMatrix.Dims()
 
-	if len(coefficients) == matrLength &&
-		allPositive(coefficients) &&
+	if !b.validResult(coefficients, matrLength) {
+		return nil, fmt.Errorf("wrong coefficients")
+	}
+
+	if b.intify {
+		intified := b.intifyCoefs(coefficients, b.maxDenom)
+		if b.validResult(intified, matrLength) {
+			coefficients = intified
+		}
+	}
+	return coefficients, nil
+}
+
+func (b *balancer) validResult(coefs []float64, matrLength int) bool {
+	return len(coefs) == matrLength &&
+		allPositive(coefs) &&
 		isReactionBalanced(
 			b.bAlgos.ReactantMatrix,
 			b.bAlgos.ProductMatrix,
-			coefficients,
+			coefs,
 			b.tolerance,
-		) {
-		if b.intify {
-			coefficients = b.intifyCoefs(coefficients, b.maxDenom)
-		}
-		return coefficients, nil
-	}
-
-	return nil, fmt.Errorf("wrong coefficients")
+		)
 }
 
 func (b *balancer) Inv() ([]float64, error) {

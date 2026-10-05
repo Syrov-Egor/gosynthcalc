@@ -69,6 +69,18 @@ type SimpleFraction struct {
 	Num, Den int64
 }
 
+// unrepresentableFraction marks a value that cannot be turned into an int64
+// fraction: the zero denominator tells callers to fall back to their original
+// (floating point) value instead of trusting a wrong integer.
+func unrepresentableFraction() SimpleFraction {
+	return SimpleFraction{0, 0}
+}
+
+// NewSimpleFraction converts f into a fraction whose denominator never exceeds
+// maxDenominator. The value itself is never clamped: exact integers are kept
+// as-is and values that cannot be bounded by maxDenominator are returned as
+// SimpleFraction{0, 0} or as a nearest-integer approximation, which callers
+// have to validate against their own tolerance.
 func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
 	if math.IsInf(f, 0) || math.IsNaN(f) || f == 0 {
 		return SimpleFraction{0, 1}
@@ -80,13 +92,25 @@ func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
 		f = -f
 	}
 
-	if f == math.Floor(f) && f < float64(maxDenominator) {
-		return SimpleFraction{sign * int64(f), 1}
+	// Exact integers are always representable by denominator 1, no matter how
+	// large they are. Clamping them to maxDenominator would silently change the
+	// value, so the value itself is preserved here instead.
+	if f == math.Floor(f) {
+		if f < float64(math.MaxInt64) {
+			return SimpleFraction{sign * int64(f), 1}
+		}
+		return unrepresentableFraction()
 	}
 
+	// |f| >= maxDenominator with a fractional part: no fraction bounded by
+	// maxDenominator can hold it, so return the nearest integer instead of
+	// clamping the value down to maxDenominator. Callers must verify that the
+	// approximation still satisfies their constraints.
 	if f >= float64(maxDenominator) {
-		intPart := min(int64(f), maxDenominator)
-		return SimpleFraction{sign * intPart, 1}
+		if f < float64(math.MaxInt64) {
+			return SimpleFraction{sign * int64(math.Round(f)), 1}
+		}
+		return unrepresentableFraction()
 	}
 
 	p0, q0 := int64(0), int64(1)
