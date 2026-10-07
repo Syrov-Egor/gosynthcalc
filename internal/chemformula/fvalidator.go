@@ -61,7 +61,6 @@ type formulaValidator struct {
 	formula string
 }
 
-// TODO: .. () cases
 func (v formulaValidator) validate() error {
 
 	if v.formula == "" {
