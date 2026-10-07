@@ -61,6 +61,7 @@ type formulaValidator struct {
 	formula string
 }
 
+// TODO: .. () cases
 func (v formulaValidator) validate() error {
 
 	if v.formula == "" {
@@ -72,7 +73,7 @@ func (v formulaValidator) validate() error {
 	invalidCharacters := make([]rune, 0)
 	var allLetters strings.Builder
 
-	for _, r := range v.formula {
+	for i, r := range v.formula {
 		if !letterPresent {
 			letterPresent = isLetter(r)
 		}
@@ -81,6 +82,14 @@ func (v formulaValidator) validate() error {
 		}
 		if !v.isAllowed(r) {
 			invalidCharacters = append(invalidCharacters, r)
+		}
+		if i > 0 {
+			if r == '.' && v.formula[i-1] == '.' {
+				return fmt.Errorf("Two (or more) dots in a row .. in the formula '%s'", v.formula)
+			}
+			if r == ')' && v.formula[i-1] == '(' {
+				return fmt.Errorf("Empty parentheses group () in the formula '%s'", v.formula)
+			}
 		}
 		switch r {
 		case '(':

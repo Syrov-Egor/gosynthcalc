@@ -78,7 +78,7 @@ func TestFormulaValidator_noLetters(t *testing.T) {
 			name:          "just brackets",
 			formula:       "[]",
 			wantErr:       true,
-			errorContains: "No letters A-Z or a-z",
+			errorContains: "Empty parentheses group",
 		},
 		{
 			name:    "non-empty string",
@@ -152,6 +152,74 @@ func TestFormulaValidator_invalidCharacters(t *testing.T) {
 			if !slices.Equal(result, tt.expected) {
 				t.Errorf("invalid characters = %v, expected %v", result, tt.expected)
 			}
+		})
+	}
+}
+
+func TestFormulaValidator_twoDots(t *testing.T) {
+	tests := []struct {
+		name          string
+		formula       string
+		wantErr       bool
+		errorContains string
+	}{
+		{
+			name:    "valid formula with one dot",
+			formula: "H2.2O",
+			wantErr: false,
+		},
+		{
+			name:          "formula with two dots in a row",
+			formula:       "H2..2O",
+			wantErr:       true,
+			errorContains: "Two (or more) dots in a row",
+		},
+		{
+			name:          "formula with three dots in a row",
+			formula:       "H2O9...",
+			wantErr:       true,
+			errorContains: "Two (or more) dots in a row",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := sanitizedFormulaValidator(tt.formula)
+			checkValidatorErr(t, v.validate(), tt.wantErr, tt.errorContains)
+		})
+	}
+}
+
+func TestFormulaValidator_emptyParenthesesGroup(t *testing.T) {
+	tests := []struct {
+		name          string
+		formula       string
+		wantErr       bool
+		errorContains string
+	}{
+		{
+			name:    "valid formula with parentheses",
+			formula: "H2.2O",
+			wantErr: false,
+		},
+		{
+			name:          "formula with two dots in a row",
+			formula:       "H2..2O",
+			wantErr:       true,
+			errorContains: "Two (or more) dots in a row",
+		},
+		{
+			name:          "formula with three dots in a row",
+			formula:       "H2O9...",
+			wantErr:       true,
+			errorContains: "Two (or more) dots in a row",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := sanitizedFormulaValidator(tt.formula)
+			checkValidatorErr(t, v.validate(), tt.wantErr, tt.errorContains)
 		})
 	}
 }
