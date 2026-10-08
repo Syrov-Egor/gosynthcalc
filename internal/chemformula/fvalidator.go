@@ -148,7 +148,8 @@ func invalidAtoms(text string) []string {
 	var result []string
 	for i := 0; i < len(text); {
 		char := text[i]
-		if char >= 'A' && char <= 'Z' {
+		switch {
+		case char >= 'A' && char <= 'Z':
 			j := i + 1
 			for j < len(text) && text[j] >= 'a' && text[j] <= 'z' {
 				j++
@@ -161,14 +162,14 @@ func invalidAtoms(text string) []string {
 				}
 			}
 			i = j
-		} else if char >= 'a' && char <= 'z' {
+		case char >= 'a' && char <= 'z':
 			token := text[i : i+1]
 			duplicate := slices.Contains(result, token)
 			if !duplicate {
 				result = append(result, token)
 			}
 			i++
-		} else {
+		default:
 			i++
 		}
 	}

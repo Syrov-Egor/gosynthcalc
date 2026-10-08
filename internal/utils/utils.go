@@ -151,8 +151,8 @@ func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
 		}
 		medNum := p0 + p1
 		medVal := float64(medNum) / float64(medDen)
-
-		if medVal < f {
+		switch {
+		case medVal < f:
 			lo, hi := int64(1), maxDenominator
 			for lo < hi {
 				mid := lo + (hi-lo+1)/2
@@ -169,7 +169,7 @@ func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
 				}
 			}
 			p0, q0 = p0+lo*p1, q0+lo*q1
-		} else if medVal > f {
+		case medVal > f:
 			lo, hi := int64(1), maxDenominator
 			for lo < hi {
 				mid := lo + (hi-lo+1)/2
@@ -186,7 +186,7 @@ func NewSimpleFraction(f float64, maxDenominator int64) SimpleFraction {
 				}
 			}
 			p1, q1 = lo*p0+p1, lo*q0+q1
-		} else {
+		default:
 			return SimpleFraction{sign * medNum, medDen}
 		}
 	}
