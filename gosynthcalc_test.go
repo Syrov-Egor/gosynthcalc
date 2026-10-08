@@ -168,7 +168,6 @@ func TestLoadBenchmarkData_readError(t *testing.T) {
 }
 
 func TestBenchmarkDataset(t *testing.T) {
-	// Exercise the same corpus-loading path as benchmarks in normal test runs.
 	formulas, reactions := setup(t, "data/text_mined_reactions.txt")
 	if len(formulas) == 0 || len(reactions) == 0 {
 		t.Fatal("benchmark dataset has no usable records")
