@@ -219,7 +219,6 @@ func parseReactionsCSV(filename string) ([]reactionData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error opening file: %v", err)
 	}
-	defer file.Close()
 
 	reader := csv.NewReader(file)
 	reader.TrimLeadingSpace = true
@@ -257,6 +256,10 @@ func parseReactionsCSV(filename string) ([]reactionData, error) {
 		})
 	}
 
+	fileCloseErr := file.Close()
+	if fileCloseErr != nil {
+		return nil, err
+	}
 	return reactions, nil
 }
 

@@ -38,7 +38,7 @@ func UniqueElems(atomsList []string) []string {
 
 // SumFloatS returns the sum of all values in s (0 for an empty slice).
 func SumFloatS(s []float64) float64 {
-	var sum float64 = 0.0
+	var sum = 0.0
 	for _, el := range s {
 		sum += el
 	}

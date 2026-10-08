@@ -226,7 +226,7 @@ func TestChemicalReaction_setCoefficientsRight(t *testing.T) {
 	reactionStr := "Cr2(SO4)3+Br2+NaOH=NaBr+Na2CrO4+Na2SO4+H2O"
 	reac, _ := NewChemicalReaction(reactionStr)
 	coefs := []float64{2, 5, 6, 1, 2, 4, 2}
-	reac.SetCoefficients(coefs)
+	_ = reac.SetCoefficients(coefs)
 	reac_coefs, _ := reac.Coefficients()
 	expected := []float64{2, 5, 6, 1, 2, 4, 2}
 	if !slices.Equal(reac_coefs.Result, expected) {

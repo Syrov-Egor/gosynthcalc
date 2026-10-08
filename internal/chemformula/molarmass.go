@@ -89,9 +89,9 @@ func (m molarMass) customOxides(inOxides ...string) ([]oxide, error) {
 
 		parsed := formula.ParsedFormula()
 		if len(parsed) != 2 {
-			return nil, fmt.Errorf("Only binary compounds can be considered as input (oxide '%s')", cOxide)
+			return nil, fmt.Errorf("only binary compounds can be considered as input (oxide '%s')", cOxide)
 		} else if parsed[1].Label != "O" {
-			return nil, fmt.Errorf("Only oxides can be considered as input (oxide '%s')", cOxide)
+			return nil, fmt.Errorf("only oxides can be considered as input (oxide '%s')", cOxide)
 		}
 
 		metals = append(metals, parsed[0].Label)

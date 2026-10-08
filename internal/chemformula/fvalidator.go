@@ -95,17 +95,17 @@ func validateBrackets(formula string) error {
 			stack = append(stack, r)
 		case ')', ']', '}':
 			if len(stack) == 0 {
-				return fmt.Errorf("Parentheses [{()}] are not balanced: unexpected %q at position %d in formula %q", r, position, formula)
+				return fmt.Errorf("parentheses [{()}] are not balanced: unexpected %q at position %d in formula %q", r, position, formula)
 			}
 			open := stack[len(stack)-1]
 			if (r == ')' && open != '(') || (r == ']' && open != '[') || (r == '}' && open != '{') {
-				return fmt.Errorf("Parentheses [{()}] are not balanced: mismatched %q and %q at position %d in formula %q", open, r, position, formula)
+				return fmt.Errorf("parentheses [{()}] are not balanced: mismatched %q and %q at position %d in formula %q", open, r, position, formula)
 			}
 			stack = stack[:len(stack)-1]
 		}
 	}
 	if len(stack) > 0 {
-		return fmt.Errorf("Parentheses [{()}] are not balanced: missing closing bracket in formula %q", formula)
+		return fmt.Errorf("parentheses [{()}] are not balanced: missing closing bracket in formula %q", formula)
 	}
 	return nil
 }

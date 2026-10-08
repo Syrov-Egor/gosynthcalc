@@ -69,7 +69,7 @@ type ChemicalFormula struct {
 //	f.MolarMass()   // 18.015
 //	f.MassPercent() // ['H': 11.19067444 'O': 88.80932556]
 func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, error) {
-	var prec uint = DefaultPrecision
+	var prec = DefaultPrecision
 	if len(precision) > 0 {
 		prec = precision[0]
 	}

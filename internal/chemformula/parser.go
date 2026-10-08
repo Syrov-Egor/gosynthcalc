@@ -170,7 +170,7 @@ func (p *Parser) advance() {
 // backs the validation performed by [NewChemicalFormula].
 func (p *Parser) parse() ([]Atom, error) {
 	if p.current.Type == TokenEOF {
-		return nil, fmt.Errorf("Empty formula string")
+		return nil, fmt.Errorf("empty formula string")
 	}
 	p.seen = make(map[string]bool)
 	p.elementOrder = nil
@@ -197,7 +197,7 @@ func (p *Parser) parse() ([]Atom, error) {
 	}
 
 	if p.current.Type == TokenAdduct {
-		return nil, p.errorAt(p.current, "There are more than 1 adduct symbol *•·")
+		return nil, p.errorAt(p.current, "there are more than 1 adduct symbol *•·")
 	}
 	if p.current.Type != TokenEOF {
 		return nil, p.unexpectedToken()
@@ -223,7 +223,7 @@ func (p *Parser) parseSequence(inGroup bool) (map[string]float64, error) {
 		switch token.Type {
 		case TokenElement:
 			if !isValidElement(token.Value) {
-				return nil, p.errorAt(token, "There are invalid atom(s) %s", token.Value)
+				return nil, p.errorAt(token, "there are invalid atom(s) %s", token.Value)
 			}
 			p.advance()
 			count, err := p.parseMultiplier()
@@ -256,22 +256,22 @@ func (p *Parser) parseSequence(inGroup bool) (map[string]float64, error) {
 
 		case TokenCloseParen:
 			if !inGroup {
-				return nil, p.errorAt(token, "Parentheses [{()}] are not balanced: unexpected closing parenthesis")
+				return nil, p.errorAt(token, "parentheses [{()}] are not balanced: unexpected closing parenthesis")
 			}
 			if terms == 0 {
-				return nil, p.errorAt(token, "Empty parentheses group ()")
+				return nil, p.errorAt(token, "empty parentheses group ()")
 			}
 			return atomCounts, nil
 
 		case TokenEOF, TokenAdduct:
 			if inGroup {
 				if token.Type == TokenAdduct {
-					return nil, p.errorAt(token, "Adduct symbols are only allowed at the top level")
+					return nil, p.errorAt(token, "adduct symbols are only allowed at the top level")
 				}
-				return nil, p.errorAt(token, "Parentheses [{()}] are not balanced: missing closing parenthesis")
+				return nil, p.errorAt(token, "parentheses [{()}] are not balanced: missing closing parenthesis")
 			}
 			if terms == 0 {
-				return nil, p.errorAt(token, "Expected a nonempty formula sequence")
+				return nil, p.errorAt(token, "expected a nonempty formula sequence")
 			}
 			return atomCounts, nil
 
@@ -336,17 +336,17 @@ func (p *Parser) unexpectedToken() error {
 	token := p.current
 	if token.Type == TokenNumber {
 		if !slices.ContainsFunc(p.lexer.input, isLetter) {
-			return p.errorAt(token, "No letters A-Z or a-z")
+			return p.errorAt(token, "no letters A-Z or a-z")
 		}
-		return p.errorAt(token, "Unexpected number %q", token.Value)
+		return p.errorAt(token, "unexpected number %q", token.Value)
 	}
 	if token.Type == TokenInvalid {
 		if token.Value[0] >= 'a' && token.Value[0] <= 'z' {
-			return p.errorAt(token, "There are invalid atom(s) %s", token.Value)
+			return p.errorAt(token, "there are invalid atom(s) %s", token.Value)
 		}
-		return p.errorAt(token, "There are invalid character(s) %s", token.Value)
+		return p.errorAt(token, "there are invalid character(s) %s", token.Value)
 	}
-	return p.errorAt(token, "Unexpected token %q", token.Value)
+	return p.errorAt(token, "unexpected token %q", token.Value)
 }
 
 // errorAt wraps message with the 1-based position of token and the text of

@@ -38,7 +38,7 @@ func TestFormulaValidator_emptyFormula(t *testing.T) {
 			name:          "empty string",
 			formula:       "",
 			wantErr:       true,
-			errorContains: "Empty formula string",
+			errorContains: "empty formula string",
 		},
 		{
 			name:    "non-empty string",
@@ -49,7 +49,7 @@ func TestFormulaValidator_emptyFormula(t *testing.T) {
 			name:          "whitespace only",
 			formula:       "   ",
 			wantErr:       true,
-			errorContains: "Empty formula string",
+			errorContains: "empty formula string",
 		},
 	}
 
@@ -72,13 +72,13 @@ func TestFormulaValidator_noLetters(t *testing.T) {
 			name:          "empty formula",
 			formula:       "",
 			wantErr:       true,
-			errorContains: "Empty formula string",
+			errorContains: "empty formula string",
 		},
 		{
 			name:          "just brackets",
 			formula:       "[]",
 			wantErr:       true,
-			errorContains: "Empty parentheses group",
+			errorContains: "empty parentheses group",
 		},
 		{
 			name:    "non-empty string",
@@ -89,7 +89,7 @@ func TestFormulaValidator_noLetters(t *testing.T) {
 			name:          "just numbers",
 			formula:       "222",
 			wantErr:       true,
-			errorContains: "No letters A-Z or a-z",
+			errorContains: "no letters A-Z or a-z",
 		},
 	}
 
@@ -206,25 +206,25 @@ func TestFormulaValidator_emptyParenthesesGroup(t *testing.T) {
 			name:          "empty parentheses",
 			formula:       "H()",
 			wantErr:       true,
-			errorContains: "Empty parentheses group",
+			errorContains: "empty parentheses group",
 		},
 		{
 			name:          "empty nested parentheses",
 			formula:       "H(())",
 			wantErr:       true,
-			errorContains: "Empty parentheses group",
+			errorContains: "empty parentheses group",
 		},
 		{
 			name:          "empty square brackets",
 			formula:       "H[ ]2",
 			wantErr:       true,
-			errorContains: "Empty parentheses group",
+			errorContains: "empty parentheses group",
 		},
 		{
 			name:          "empty curly brackets",
 			formula:       "H{}",
 			wantErr:       true,
-			errorContains: "Empty parentheses group",
+			errorContains: "empty parentheses group",
 		},
 	}
 
@@ -534,7 +534,7 @@ func TestFormulaValidator_validate(t *testing.T) {
 			name:          "empty formula",
 			formula:       "",
 			wantErr:       true,
-			errorContains: "Empty formula string",
+			errorContains: "empty formula string",
 		},
 		{
 			name:          "invalid characters",
@@ -552,7 +552,7 @@ func TestFormulaValidator_validate(t *testing.T) {
 			name:          "no letters",
 			formula:       "222",
 			wantErr:       true,
-			errorContains: "No letters A-Z or a-z",
+			errorContains: "no letters A-Z or a-z",
 		},
 		{
 			name:          "unbalanced brackets",

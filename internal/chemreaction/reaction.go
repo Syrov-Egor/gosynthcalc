@@ -625,10 +625,10 @@ func (o crOutput) String() string {
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 
 	for i, comp := range o.Formulas {
-		fmt.Fprintf(w, "%s\tM = %.*f\tg/mol\tm = %.*f\tg\n",
+		_, _ = fmt.Fprintf(w, "%s\tM = %.*f\tg/mol\tm = %.*f\tg\n",
 			comp, o.printPrecision, o.MolarMasses[i], o.printPrecision, o.Masses[i])
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	return out.String() + strings.TrimSuffix(buf.String(), "\n")
 }
