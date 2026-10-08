@@ -56,14 +56,13 @@ func (m molarMass) customOxides(inOxides ...string) ([]oxide, error) {
 	oxides := []oxide{}
 	metals := []string{}
 	for _, cOxide := range inOxides {
-		validator := formulaValidator{formula: cOxide}
-		err := validator.validate()
+		formula, err := NewChemicalFormula(cOxide)
 		if err != nil {
 			return nil, err
 		}
 
-		parsed := NewParser(cOxide).parse()
-		if len(parsed) > 2 {
+		parsed := formula.ParsedFormula()
+		if len(parsed) != 2 {
 			return nil, fmt.Errorf("Only binary compounds can be considered as input (oxide '%s')", cOxide)
 		} else if parsed[1].Label != "O" {
 			return nil, fmt.Errorf("Only oxides can be considered as input (oxide '%s')", cOxide)
@@ -103,7 +102,11 @@ func (m molarMass) oxidePercent(inOxides ...string) ([]Atom, error) {
 
 	oxPercents := []float64{}
 	for _, oxide := range oxides {
-		parsedOxide := NewParser(oxide.formula).parse()
+		formula, err := NewChemicalFormula(oxide.formula)
+		if err != nil {
+			return nil, err
+		}
+		parsedOxide := formula.ParsedFormula()
 		oxideMass := molarMass{parsedOxide}.molarMass()
 		atomicOxideCoef := parsedOxide[0].Amount
 		atomicMass := periodicTable[oxide.metal].weight

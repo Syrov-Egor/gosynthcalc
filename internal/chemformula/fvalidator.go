@@ -62,59 +62,31 @@ type formulaValidator struct {
 }
 
 func (v formulaValidator) validate() error {
+	_, err := NewParser(v.formula).parse()
+	return err
+}
 
-	if v.formula == "" {
-		return fmt.Errorf("Empty formula string")
-	}
-
-	leftParenthesisCount, rightParenthesisCount, adductCount := 0, 0, 0
-	letterPresent := false
-	invalidCharacters := make([]rune, 0)
-	var allLetters strings.Builder
-
-	for i, r := range v.formula {
-		if !letterPresent {
-			letterPresent = isLetter(r)
-		}
-		if isLetter(r) {
-			allLetters.WriteRune(r)
-		}
-		if !v.isAllowed(r) {
-			invalidCharacters = append(invalidCharacters, r)
-		}
-		if i > 0 {
-			if r == '.' && v.formula[i-1] == '.' {
-				return fmt.Errorf("Two (or more) dots in a row .. in the formula '%s'", v.formula)
-			}
-			if r == ')' && v.formula[i-1] == '(' {
-				return fmt.Errorf("Empty parentheses group () in the formula '%s'", v.formula)
-			}
-		}
+func validateBrackets(formula string) error {
+	var stack []rune
+	position := 0
+	for _, r := range formula {
+		position++
 		switch r {
-		case '(':
-			leftParenthesisCount++
-		case ')':
-			rightParenthesisCount++
-		case '*':
-			adductCount++
+		case '(', '[', '{':
+			stack = append(stack, r)
+		case ')', ']', '}':
+			if len(stack) == 0 {
+				return fmt.Errorf("Parentheses [{()}] are not balanced: unexpected %q at position %d in formula %q", r, position, formula)
+			}
+			open := stack[len(stack)-1]
+			if (r == ')' && open != '(') || (r == ']' && open != '[') || (r == '}' && open != '{') {
+				return fmt.Errorf("Parentheses [{()}] are not balanced: mismatched %q and %q at position %d in formula %q", open, r, position, formula)
+			}
+			stack = stack[:len(stack)-1]
 		}
 	}
-
-	if !letterPresent {
-		return fmt.Errorf("No letters A-Z or a-z in the formula '%s'", v.formula)
-	}
-	if len(invalidCharacters) > 0 {
-		return fmt.Errorf("There are invalid character(s) %s in the formula '%s'", string(invalidCharacters), v.formula)
-	}
-	invalidAtoms := invalidAtoms(v.formula)
-	if len(invalidAtoms) > 0 {
-		return fmt.Errorf("There are invalid atom(s) %s in the formula '%s'", invalidAtoms, v.formula)
-	}
-	if leftParenthesisCount != rightParenthesisCount {
-		return fmt.Errorf("Parentheses [{()}] are not balanced in the formula '%s'", v.formula)
-	}
-	if adductCount > 1 {
-		return fmt.Errorf("There are more than 1 adduct symbol *•· in the formula '%s'", v.formula)
+	if len(stack) > 0 {
+		return fmt.Errorf("Parentheses [{()}] are not balanced: missing closing bracket in formula %q", formula)
 	}
 	return nil
 }

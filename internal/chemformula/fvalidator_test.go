@@ -172,13 +172,13 @@ func TestFormulaValidator_twoDots(t *testing.T) {
 			name:          "formula with two dots in a row",
 			formula:       "H2..2O",
 			wantErr:       true,
-			errorContains: "Two (or more) dots in a row",
+			errorContains: "invalid number",
 		},
 		{
 			name:          "formula with three dots in a row",
 			formula:       "H2O9...",
 			wantErr:       true,
-			errorContains: "Two (or more) dots in a row",
+			errorContains: "invalid number",
 		},
 	}
 
@@ -199,20 +199,32 @@ func TestFormulaValidator_emptyParenthesesGroup(t *testing.T) {
 	}{
 		{
 			name:    "valid formula with parentheses",
-			formula: "H2.2O",
+			formula: "Ca(OH)2",
 			wantErr: false,
 		},
 		{
-			name:          "formula with two dots in a row",
-			formula:       "H2..2O",
+			name:          "empty parentheses",
+			formula:       "H()",
 			wantErr:       true,
-			errorContains: "Two (or more) dots in a row",
+			errorContains: "Empty parentheses group",
 		},
 		{
-			name:          "formula with three dots in a row",
-			formula:       "H2O9...",
+			name:          "empty nested parentheses",
+			formula:       "H(())",
 			wantErr:       true,
-			errorContains: "Two (or more) dots in a row",
+			errorContains: "Empty parentheses group",
+		},
+		{
+			name:          "empty square brackets",
+			formula:       "H[ ]2",
+			wantErr:       true,
+			errorContains: "Empty parentheses group",
+		},
+		{
+			name:          "empty curly brackets",
+			formula:       "H{}",
+			wantErr:       true,
+			errorContains: "Empty parentheses group",
 		},
 	}
 
@@ -220,6 +232,44 @@ func TestFormulaValidator_emptyParenthesesGroup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v := sanitizedFormulaValidator(tt.formula)
 			checkValidatorErr(t, v.validate(), tt.wantErr, tt.errorContains)
+		})
+	}
+}
+
+func TestFormulaValidator_malformedSyntax(t *testing.T) {
+	for _, formula := range []string{
+		"H1.2.3O", "H.O", "H.", "H1.", "(H)1.2.3", "(H).", "H*1.2.3O",
+		")H(", "H)O(", "H*", "*H", "H*2", "H**O", "(H*O)", "H*(O*H)",
+		"2H2O", "(2H)", "H1,2,3O", "H٢O", "H2@O",
+	} {
+		t.Run(formula, func(t *testing.T) {
+			checkValidatorErr(t, sanitizedFormulaValidator(formula).validate(), true, "")
+		})
+	}
+}
+
+func TestValidateBrackets(t *testing.T) {
+	tests := []struct {
+		formula string
+		wantErr bool
+	}{
+		{"H2O", false},
+		{"K3[Fe(CN)6]{H2O}", false},
+		{"[{(H)}]", false},
+		{"[H)", true},
+		{"{H]", true},
+		{"([H)]", true},
+		{"]H[", true},
+		{"H[O", true},
+		{"H{O", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.formula, func(t *testing.T) {
+			contains := ""
+			if tt.wantErr {
+				contains = "not balanced"
+			}
+			checkValidatorErr(t, validateBrackets(tt.formula), tt.wantErr, contains)
 		})
 	}
 }

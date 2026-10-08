@@ -17,7 +17,7 @@ type ChemicalFormula struct {
 	sanFormula string
 	precision  uint
 
-	parsedFormula *[]Atom
+	parsedFormula []Atom
 	molarMass     *float64
 	massPercent   *[]Atom
 	atomicPercent *[]Atom
@@ -30,17 +30,20 @@ func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, er
 		prec = precision[0]
 	}
 
+	if err := validateBrackets(formula); err != nil {
+		return nil, err
+	}
 	sanFormula := sanitize(formula)
-	validator := formulaValidator{formula: sanFormula}
-	err := validator.validate()
+	parsed, err := NewParser(sanFormula).parse()
 	if err != nil {
 		return nil, err
 	}
 
 	return &ChemicalFormula{
-		formula:    formula,
-		sanFormula: sanFormula,
-		precision:  prec,
+		formula:       formula,
+		sanFormula:    sanFormula,
+		precision:     prec,
+		parsedFormula: parsed,
 	}, nil
 }
 
@@ -49,12 +52,7 @@ func (c *ChemicalFormula) Formula() string {
 }
 
 func (c *ChemicalFormula) ParsedFormula() []Atom {
-	if c.parsedFormula == nil {
-		parser := NewParser(c.sanFormula)
-		parsed := parser.parse()
-		c.parsedFormula = &parsed
-	}
-	return *c.parsedFormula
+	return c.parsedFormula
 }
 
 func (c *ChemicalFormula) MolarMass() float64 {
