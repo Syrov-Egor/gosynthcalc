@@ -17,7 +17,7 @@ type Atom struct {
 	Amount float64
 }
 
-// String formats the atom as a Python-dict-like entry, e.g. 'Fe': 2.
+// String formats the atom as a dict-like entry, e.g. 'Fe': 2.
 func (a Atom) String() string {
 	return fmt.Sprintf("'%s': %v", a.Label, a.Amount)
 }

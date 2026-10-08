@@ -173,8 +173,7 @@ func oxideCacheKey(inOxides []string) string {
 }
 
 // Output gathers every property of the formula into a [cfOutput] value in a
-// single pass; it corresponds to the output_results dict of the Python class.
-// The optional printPrecision overrides [DefaultPrintPrecision] and controls
+// single pass. The optional printPrecision overrides [DefaultPrintPrecision] and controls
 // only how many digits [cfOutput.String] prints, not the stored values.
 func (c *ChemicalFormula) Output(printPrecision ...uint) cfOutput {
 	var pPrecision uint
@@ -198,8 +197,7 @@ func (c *ChemicalFormula) Output(printPrecision ...uint) cfOutput {
 	return cfO
 }
 
-// cfOutput is the collected result of a [ChemicalFormula] computation, the Go
-// counterpart of the output_results dict of the Python class. Its
+// cfOutput is the collected result of a [ChemicalFormula] computation. Its
 // [cfOutput.String] method renders the human-readable report.
 type cfOutput struct {
 	Formula        string

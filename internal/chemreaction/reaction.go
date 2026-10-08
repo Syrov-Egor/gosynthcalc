@@ -57,12 +57,10 @@ const (
 	// DefaultIntify is the default value of [ReacOptions.Intify]: integer
 	// coefficients are preferred.
 	DefaultIntify bool = true
-	// DefaultPrecision is the default rounding precision, matching the
-	// Python default of 8.
+	// DefaultPrecision is the default rounding precision.
 	DefaultPrecision uint = 8
 	// DefaultPrintPrecision is the default number of digits printed by
-	// [ChemicalReaction.Output], matching print_precision in the Python
-	// version.
+	// [ChemicalReaction.Output].
 	DefaultPrintPrecision uint = 4
 	// DefaultTolerance is the default absolute tolerance for float
 	// comparisons, used when [ReacOptions.Tolerance] is not set.

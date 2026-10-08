@@ -47,8 +47,7 @@ type rnCoef struct {
 }
 
 // reactionDecomposer splits a reaction string into reactants and products and
-// strips the numeric coefficients off the formulas. It is the Go counterpart
-// of the Python ReactionDecomposer class.
+// strips the numeric coefficients off the formulas.
 //
 // Fields:
 //
