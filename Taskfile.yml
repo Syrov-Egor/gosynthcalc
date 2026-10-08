@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://taskfile.dev/schema.json
 
 version: '3'
-
 silent: true
+set: [pipefail]
 
 vars:
   BENCH_COUNT: 10
@@ -22,12 +22,32 @@ tasks:
   bench-formula:
     desc: "Run chemformula benchmark"
     cmds:
-      - go test -bench=BenchmarkChemicalFormula_output -count={{.BENCH_COUNT}} -run='^$' | benchstat -
+      - task: run-benchmark
+        vars:
+          BENCHMARK: BenchmarkChemicalFormula_output
 
   bench-reaction:
     desc: "Run chemreaction benchmark"
     cmds:
-      - go test -bench=BenchmarkChemicalReaction_output -count={{.BENCH_COUNT}} -run='^$' | benchstat -
+      - task: run-benchmark
+        vars:
+          BENCHMARK: BenchmarkChemicalReaction_output
+
+  run-benchmark:
+    internal: true
+    cmds:
+      - |
+        output=$(mktemp)
+        trap 'rm -f "$output"' EXIT
+        if go test -bench='^{{.BENCHMARK}}$' -count={{.BENCH_COUNT}} -run='^$' >"$output" 2>&1; then
+          # Show corpus diagnostics once, even when running multiple samples.
+          awk '/benchmark dataset|skipped reaction/ && !seen[$0]++' "$output" >&2
+          benchstat - <"$output"
+        else
+          status=$?
+          cat "$output" >&2
+          exit "$status"
+        fi
   
   bench:
     desc: "Run all benchmarks"
