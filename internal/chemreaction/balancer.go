@@ -71,8 +71,8 @@ func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 //
 // The conversion is all-or-nothing: if any coefficient is not finite or
 // exceeds limit, cannot be represented as an int64 fraction, would make the
-// LCM overflow or exceed 1e15, flips sign along the way or produces an
-// oversized value, the input coefficients are returned unchanged so that
+// LCM overflow or exceed 1e15, flips sign along the way or ends up negative
+// or oversized, the input coefficients are returned unchanged so that
 // callers keep working with correct floats rather than wrong integers. The
 // result is validated again by [balancer.calculateByMethod] before it is
 // accepted.
@@ -119,12 +119,13 @@ func (b *balancer) intifyCoefs(coefs []float64, limit int) []float64 {
 		coefficients[i] = val / gcd
 	}
 
-	// TODO: coeffs not changing
+	// Chemical coefficients must stay positive, so a negative value here
+	// means the input was not a valid reaction: fall back to the validated
+	// floats instead of silently flipping the sign, which would forge a
+	// plausible-looking answer out of a wrong one. The same fallback catches
+	// values that clearing denominators pushed past limit.
 	for _, coeff := range coefficients {
-		if coeff < 0 {
-			coeff = -coeff
-		}
-		if int(coeff) > limit {
+		if coeff < 0 || coeff > int64(limit) {
 			return initialCoefficients
 		}
 	}

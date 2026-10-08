@@ -175,6 +175,11 @@ func TestBalancer_intifyCoefsPreservesUnrepresentableValues(t *testing.T) {
 			coefs: []float64{math.NaN(), 1, 1},
 			want:  []float64{math.NaN(), 1, 1},
 		},
+		{
+			name:  "negative coefficient keeps validated floats",
+			coefs: []float64{-2.5, 1, 2},
+			want:  []float64{-2.5, 1, 2},
+		},
 	}
 
 	for _, tt := range tests {
