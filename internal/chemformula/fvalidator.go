@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+// allowed holds the ASCII characters permitted in a formula: letters, digits
+// and the punctuation ". ( ) *". validSingle and validDouble hold the
+// one- and two-letter symbols of the periodic table. All three tables are
+// built once in init: the element tables directly from periodicTable, so
+// they can never drift out of sync with it.
 var (
 	allowed     [256]bool
 	validSingle [26]bool
@@ -36,6 +41,11 @@ func init() {
 	}
 }
 
+// sanitize normalizes a formula string before parsing: whitespace is dropped,
+// square and curly brackets become parentheses, the adduct symbols "·" and
+// "•" become "*" and commas become decimal points. Everything else is kept
+// as-is, so "K4[Fe(CN)6]·3H2O" and "CuSO4•5H2O" become ordinary
+// parenthesis/adduct notation for the parser.
 func sanitize(formula string) string {
 	var res strings.Builder
 	res.Grow(len(formula))
@@ -57,15 +67,24 @@ func sanitize(formula string) string {
 	return res.String()
 }
 
+// formulaValidator checks a raw formula string. Almost every
+// check is carried out by the [Parser] itself, so validate only
+// has to run a full parse and report its first error.
 type formulaValidator struct {
 	formula string
 }
 
+// validate parses the formula from scratch and returns the first parsing
+// error, if any.
 func (v formulaValidator) validate() error {
 	_, err := NewParser(v.formula).parse()
 	return err
 }
 
+// validateBrackets reports whether every "(", "[" and "{" in formula is
+// closed by the matching bracket type in the correct nesting order, e.g.
+// "([)]" is rejected. It runs before [sanitize], so all three bracket styles
+// are checked, and the reported positions are 1-based rune offsets.
 func validateBrackets(formula string) error {
 	var stack []rune
 	position := 0
@@ -91,14 +110,20 @@ func validateBrackets(formula string) error {
 	return nil
 }
 
+// isAllowed reports whether r is one of the ASCII characters a formula may
+// contain: a letter, a digit or one of ". ( ) *".
 func (v formulaValidator) isAllowed(r rune) bool {
 	return r >= 0 && r < 256 && allowed[byte(r)]
 }
 
+// isLetter reports whether r is an ASCII letter.
 func isLetter(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
+// isValidElement reports whether tok is a symbol known to the periodic
+// table. Only one-letter and two-letter symbols in canonical case ("C",
+// "Fe") are accepted, so "FE" or "x" are not.
 func isValidElement(tok string) bool {
 	switch len(tok) {
 	case 1:
@@ -113,6 +138,12 @@ func isValidElement(tok string) bool {
 	}
 }
 
+// invalidAtoms returns the distinct element-like tokens of text that are not
+// in the periodic table, each reported once, together with any stray
+// lowercase letters. The string is scanned left to right for
+// runs that start with an uppercase letter and continue with lowercase ones
+// ("Zz" in "CO2Zz"), and letters that cannot form such a run are reported
+// individually.
 func invalidAtoms(text string) []string {
 	var result []string
 	for i := 0; i < len(text); {

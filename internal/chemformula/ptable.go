@@ -1,12 +1,21 @@
 package chemformula
 
+// element holds everything this package needs to know about a chemical
+// element: its standard atomic weight in g/mol and the oxide formula used by
+// default when mass percents are converted into oxide percents.
 type element struct {
 	weight       float64
 	defaultOxide string
 }
 
+// pTable maps element symbols to their properties.
 type pTable map[string]element
 
+// periodicTable is the periodic table of elements used by this package:
+// 118 elements from H to Og with their standard atomic weights (taken from
+// [IUPAC](https://iupac.qmul.ac.uk/AtWt/)) and their default oxide formulas,
+// copied verbatim from chemsynthcalc.periodic_table. The set of its keys is
+// also what decides whether an element token in a formula is valid.
 var periodicTable pTable = pTable{
 	"H":  element{1.008, "H2O"},
 	"He": element{4.002602, "He"},
@@ -128,8 +137,12 @@ var periodicTable pTable = pTable{
 	"Og": element{294, "Og"},
 }
 
+// periodicTableElements lists the symbols of every element of periodicTable.
+// The order is fixed once at package initialization but is otherwise
+// arbitrary, because it follows Go map iteration order.
 var periodicTableElements []string = getKeys(periodicTable)
 
+// getKeys returns the element symbols of p.
 func getKeys(p pTable) []string {
 	keys := make([]string, 0, len(p))
 	for k := range p {

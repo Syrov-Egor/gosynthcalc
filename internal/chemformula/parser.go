@@ -8,42 +8,70 @@ import (
 	"strings"
 )
 
+// Atom is a single entry of a parsed chemical formula: Label is the element
+// symbol (e.g. "Fe") and Amount is the number of atoms of that element in the
+// formula. Amount may be fractional, since the parser accepts non-integer
+// atom counts such as 0.99 in solid-solution formulas.
 type Atom struct {
 	Label  string
 	Amount float64
 }
 
+// String formats the atom as a Python-dict-like entry, e.g. 'Fe': 2.
 func (a Atom) String() string {
 	return fmt.Sprintf("'%s': %v", a.Label, a.Amount)
 }
 
+// TokenType identifies the kind of lexical token produced by a [Lexer].
 type TokenType int
 
 const (
+	// TokenElement is an element symbol such as "Fe" or "C".
 	TokenElement TokenType = iota
+	// TokenNumber is a numeric literal such as "2" or "0.5", used as an
+	// atom amount or as the multiplier of a group or adduct.
 	TokenNumber
+	// TokenOpenParen is an opening bracket; after sanitization every
+	// bracket style is reported as "(".
 	TokenOpenParen
+	// TokenCloseParen is a closing bracket; after sanitization every
+	// bracket style is reported as ")".
 	TokenCloseParen
+	// TokenAdduct is the adduct separator: "*", "·" and "•" are all
+	// normalized to "*", as in CuSO4*5H2O (water of crystallization
+	// notation).
 	TokenAdduct
+	// TokenEOF marks the end of the input.
 	TokenEOF
+	// TokenInvalid is any character that cannot start a token, such as a
+	// lowercase letter where an element symbol is expected.
 	TokenInvalid
 )
 
+// Token is a lexical unit of a formula string. Position is the zero-based
+// rune offset of the token in the normalized input; parser error messages
+// report it as a 1-based position.
 type Token struct {
 	Type     TokenType
 	Value    string
 	Position int // Zero-based rune offset in the normalized input.
 }
 
+// Lexer splits a normalized formula string into [Token]s.
 type Lexer struct {
 	input []rune
 	pos   int
 }
 
+// NewLexer returns a Lexer positioned at the start of input. Input must
+// already be normalized by [sanitize].
 func NewLexer(input []rune) *Lexer {
 	return &Lexer{input: input, pos: 0}
 }
 
+// NextToken returns the next token of the input, or a [TokenEOF] token once
+// the input is exhausted. Characters that cannot start a valid token are
+// returned one by one as [TokenInvalid].
 func (l *Lexer) NextToken() Token {
 	if l.pos >= len(l.input) {
 		return Token{Type: TokenEOF, Position: l.pos}
@@ -75,6 +103,8 @@ func (l *Lexer) NextToken() Token {
 	return Token{Type: TokenInvalid, Value: string(ch), Position: start}
 }
 
+// readElement reads an element symbol: an uppercase letter followed by any
+// run of lowercase letters ("Uuo", "Fe").
 func (l *Lexer) readElement() Token {
 	start := l.pos
 	l.pos++
@@ -86,6 +116,9 @@ func (l *Lexer) readElement() Token {
 	return Token{Type: TokenElement, Value: string(l.input[start:l.pos]), Position: start}
 }
 
+// readNumber reads a numeric literal: a run of digits and decimal points.
+// Whether the result is a valid number (at most one point, no trailing
+// point) is decided later by [Parser.parseMultiplier].
 func (l *Lexer) readNumber() Token {
 	start := l.pos
 
@@ -101,6 +134,15 @@ func (l *Lexer) readNumber() Token {
 	return Token{Type: TokenNumber, Value: string(l.input[start:l.pos]), Position: start}
 }
 
+// Parser turns a normalized chemical formula string into a slice of [Atom]s.
+// Amounts of atoms that appear several times are summed, parenthesized groups are
+// folded into their surroundings with their multiplier, a single adduct ("*")
+// joins two parts of the formula, and the resulting atoms keep the order of
+// their first appearance in the string.
+// It rejects empty formulas, unknown element symbols, stray characters,
+// unbalanced parentheses, empty groups, malformed numbers and more than
+// one adduct symbol. Errors reported while scanning carry a 1-based position
+// within the normalized formula.
 type Parser struct {
 	lexer        *Lexer
 	current      Token
@@ -108,6 +150,8 @@ type Parser struct {
 	seen         map[string]bool
 }
 
+// NewParser returns a Parser for formula, which must already be normalized
+// by [sanitize]. The first token is read eagerly.
 func NewParser(formula string) *Parser {
 	lexer := NewLexer([]rune(formula))
 	return &Parser{
@@ -116,10 +160,14 @@ func NewParser(formula string) *Parser {
 	}
 }
 
+// advance reads the next token from the lexer.
 func (p *Parser) advance() {
 	p.current = p.lexer.NextToken()
 }
 
+// parse parses the whole formula and returns its atoms ordered by first
+// appearance, or an error describing the first problem it encountered. It
+// backs the validation performed by [NewChemicalFormula].
 func (p *Parser) parse() ([]Atom, error) {
 	if p.current.Type == TokenEOF {
 		return nil, fmt.Errorf("Empty formula string")
@@ -162,6 +210,11 @@ func (p *Parser) parse() ([]Atom, error) {
 	return result, nil
 }
 
+// parseSequence parses atoms, parenthesized groups and their multipliers
+// until a closing parenthesis (when inGroup is true), an adduct symbol or the
+// end of input is reached, and returns the atom counts it accumulated. Each
+// element symbol is recorded in p.elementOrder on first sight so that the
+// final [Atom] slice preserves the order of the formula.
 func (p *Parser) parseSequence(inGroup bool) (map[string]float64, error) {
 	atomCounts := make(map[string]float64)
 	terms := 0
@@ -229,6 +282,10 @@ func (p *Parser) parseSequence(inGroup bool) (map[string]float64, error) {
 	}
 }
 
+// parseMultiplier consumes the numeric token that follows an atom, a group or
+// an adduct symbol and returns its value, defaulting to 1 when no number is
+// present. Numbers with several decimal points, a trailing point or a
+// non-finite value are rejected.
 func (p *Parser) parseMultiplier() (float64, error) {
 	if p.current.Type != TokenNumber {
 		return 1, nil
@@ -248,6 +305,8 @@ func (p *Parser) parseMultiplier() (float64, error) {
 	return count, nil
 }
 
+// addCount adds amount to the count of the element label, rejecting totals
+// that would become NaN or infinite.
 func (p *Parser) addCount(counts map[string]float64, label string, amount float64, token Token) error {
 	count := counts[label] + amount
 	if math.IsNaN(count) || math.IsInf(count, 0) {
@@ -257,6 +316,8 @@ func (p *Parser) addCount(counts map[string]float64, label string, amount float6
 	return nil
 }
 
+// mergeCounts folds the atom counts of a parsed group or adduct part into
+// counts, scaling them by multiplier; token is used for error reporting.
 func (p *Parser) mergeCounts(counts, subCounts map[string]float64, multiplier float64, token Token) error {
 	for label, count := range subCounts {
 		if err := p.addCount(counts, label, count*multiplier, token); err != nil {
@@ -266,6 +327,11 @@ func (p *Parser) mergeCounts(counts, subCounts map[string]float64, multiplier fl
 	return nil
 }
 
+// unexpectedToken builds an error for a token that cannot appear at the
+// current position, tailoring the message: a number in a place where an
+// atom belongs ("No letters A-Z or a-z" if the formula contains no letters
+// at all) or an invalid character (a lowercase letter is reported as an
+// invalid atom).
 func (p *Parser) unexpectedToken() error {
 	token := p.current
 	if token.Type == TokenNumber {
@@ -283,6 +349,9 @@ func (p *Parser) unexpectedToken() error {
 	return p.errorAt(token, "Unexpected token %q", token.Value)
 }
 
+// errorAt wraps message with the 1-based position of token and the text of
+// the normalized formula, e.g.:
+// There are invalid atom(s) Xx at position 3 in formula "H2XxO".
 func (p *Parser) errorAt(token Token, format string, args ...any) error {
 	return fmt.Errorf("%s at position %d in formula %q", fmt.Sprintf(format, args...), token.Position+1, string(p.lexer.input))
 }
