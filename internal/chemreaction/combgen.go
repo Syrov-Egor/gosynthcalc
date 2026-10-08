@@ -7,11 +7,16 @@ import (
 	"sync"
 )
 
+// multiCombinationGenerator enumerates candidate coefficient vectors: all
+// combinations of k coefficients whose values range from 1 to maxCoef, in
+// order of increasing maximal entry so that small solutions are found first.
 type multiCombinationGenerator struct {
-	maxCoef int
-	k       int
+	maxCoef int // largest coefficient value to enumerate
+	k       int // number of coefficients (compounds) in each combination
 }
 
+// newMultiCombinationGenerator returns a generator of combinations of k
+// coefficients bounded by maxCoef.
 func newMultiCombinationGenerator(maxCoef, k int) *multiCombinationGenerator {
 	return &multiCombinationGenerator{
 		maxCoef: maxCoef,
@@ -19,6 +24,11 @@ func newMultiCombinationGenerator(maxCoef, k int) *multiCombinationGenerator {
 	}
 }
 
+// generate streams every combination to the returned channel, spreading the
+// work over numWorkers goroutines (runtime.GOMAXPROCS(0) when numWorkers is
+// not positive). The channel is closed when the enumeration completes or ctx
+// is cancelled. Progress ("Processing coef i of maxCoef") is printed to
+// stdout while the search runs.
 func (m *multiCombinationGenerator) generate(ctx context.Context, numWorkers int) <-chan []int {
 	if numWorkers <= 0 {
 		numWorkers = runtime.GOMAXPROCS(0)
@@ -91,6 +101,16 @@ func (m *multiCombinationGenerator) generate(ctx context.Context, numWorkers int
 	return out
 }
 
+// generateCombinations sends to out every k-length combination of values in
+// [1, maxVal] whose first entry runs from startingValue up to maxVal while
+// the remaining entries count like an odometer (the last one fastest); the
+// enumeration therefore starts at (startingValue, 1, ..., 1). Each
+// combination is copied before it is sent, so consumers may keep it. The
+// function returns early when ctx is cancelled.
+//
+// Splitting the range of the first entry between callers is how
+// [multiCombinationGenerator.generate] partitions the search space between
+// its workers.
 func generateCombinations(ctx context.Context, startingValue, maxVal, k int, out chan<- []int) {
 	current := make([]int, k)
 	current[0] = startingValue

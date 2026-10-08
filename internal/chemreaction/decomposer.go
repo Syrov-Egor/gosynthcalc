@@ -7,11 +7,18 @@ import (
 	"unicode"
 )
 
+// symbols collects the textual conventions of a reaction string: the
+// separators allowed between reactants and products, and the only separator
+// allowed between compounds.
 type symbols struct {
 	reactionSeparators []string
 	reactantSeparator  string
 }
 
+// reactionSymbols lists every separator accepted in a reaction string
+// ("==", "=", "<->", "->", "<>", ">", "→", "⇄") plus the compound separator
+// "+". All reaction separators are normalized to "=" by [sanitize] before
+// decomposition.
 var reactionSymbols symbols = symbols{
 	reactionSeparators: []string{
 		"==",
@@ -25,16 +32,32 @@ var reactionSymbols symbols = symbols{
 	reactantSeparator: "+",
 }
 
+// compound pairs a formula string with the numeric coefficient that was
+// written in front of it in the reaction string (1.0 when there was none).
 type compound struct {
 	coef    float64
 	formula string
 }
 
+// rnCoef is the scratch state of [splitCoefFromFormula]: i is the index of
+// the last digit or decimal point scanned and coef collects those runes.
 type rnCoef struct {
 	i    int
 	coef []rune
 }
 
+// reactionDecomposer splits a reaction string into reactants and products and
+// strips the numeric coefficients off the formulas. It is the Go counterpart
+// of the Python ReactionDecomposer class.
+//
+// Fields:
+//
+//   - separatorPos is the number of reactants, i.e. the column at which the
+//     products begin in the reaction matrix;
+//   - initCoefs are the coefficients found in the reaction string (1.0 where
+//     none were written);
+//   - compounds is every formula without its coefficient, reactants first;
+//   - reactants and products are the two halves of compounds.
 type reactionDecomposer struct {
 	separatorPos int
 	initCoefs    []float64
@@ -43,6 +66,10 @@ type reactionDecomposer struct {
 	products     []string
 }
 
+// newReactionDecomposer splits reaction on the "=" separator and then on "+",
+// and separates the leading coefficient from each formula. It fails if the
+// string is too short to hold a reaction, has no separator between reactants
+// and products, or contains an empty compound (typically two adjacent "+").
 func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 	if len(reaction) < 2 {
 		return nil, fmt.Errorf("empty or invalid reaction string")
@@ -86,6 +113,9 @@ func newReactionDecomposer(reaction string) (*reactionDecomposer, error) {
 	}, nil
 }
 
+// splitCoefFromFormula splits the leading coefficient (integer or float) off
+// a compound of the reaction string and returns the pair (coefficient,
+// formula). A compound that does not start with a digit keeps the coefficient 1.0.
 func splitCoefFromFormula(formula string) (compound, error) {
 	if !unicode.IsDigit(rune(formula[0])) {
 		return compound{coef: 1.0, formula: formula}, nil

@@ -7,6 +7,9 @@ import (
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 )
 
+// coeffs computes and validates the coefficients of a reaction according to
+// the selected [Mode]. Element-set validation, coefficient calculation for
+// the mode, coefficient list validation.
 type coeffs struct {
 	mode               Mode
 	parsedFormulas     [][]chemformula.Atom
@@ -14,6 +17,16 @@ type coeffs struct {
 	balancer           *balancer
 }
 
+// calculateCoeffs produces the coefficients for the configured mode:
+//
+//   - [Force] takes the coefficients written in the reaction string as they
+//     are, without any balance check (Method "User");
+//   - [Check] takes them only if they balance the reaction, and fails with
+//     "reaction is not balanced" otherwise (Method "User");
+//   - [Balance] computes them automatically with [balancer.Auto] and reports
+//     the algorithm that succeeded.
+//
+// Any other mode fails with "no such mode".
 func (c *coeffs) calculateCoeffs() (MethodResult, error) {
 	user := "User"
 	switch c.mode {
@@ -43,6 +56,8 @@ func (c *coeffs) calculateCoeffs() (MethodResult, error) {
 	}
 }
 
+// validateCoeffs checks that every coefficient is strictly positive and that
+// there is exactly one per compound of the reaction.
 func (c *coeffs) validateCoeffs(coefs []float64) error {
 	_, cols := c.balancer.reactionMatrix.Dims()
 
@@ -56,6 +71,12 @@ func (c *coeffs) validateCoeffs(coefs []float64) error {
 	}
 }
 
+// elementCountValidation returns the [utils.SymmetricDifference] of the
+// element sets of the reactant and product parts: a non-empty result means
+// some element occurs on only one side of the reaction, which no
+// coefficients can fix, and the caller turns it into an error. In [Force]
+// mode the check is skipped and nil is returned, since the user takes
+// responsibility for the reaction.
 func (c *coeffs) elementCountValidation() []string {
 	if c.mode != Force {
 		r := make([]string, 0)
@@ -84,6 +105,9 @@ func (c *coeffs) elementCountValidation() []string {
 	return nil
 }
 
+// getCoeffs runs the whole pipeline — element-set validation, mode-specific
+// calculation and list validation — and returns the coefficients together
+// with the name of the method that produced them.
 func (c *coeffs) getCoeffs() (MethodResult, error) {
 	user := "User"
 	nilStr := MethodResult{Method: user, Result: nil}

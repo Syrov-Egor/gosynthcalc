@@ -45,7 +45,7 @@ func TestChemicalReaction_forceMode(t *testing.T) {
 	reacOpts := ReacOptions{
 		Rmode:      Force,
 		Target:     0,
-		TargerMass: 1.0,
+		TargetMass: 1.0,
 		Intify:     true,
 		Precision:  8,
 		Tolerance:  1e-8,
@@ -63,7 +63,7 @@ func TestChemicalReaction_checkModeRight(t *testing.T) {
 	reacOpts := ReacOptions{
 		Rmode:      Check,
 		Target:     0,
-		TargerMass: 1.0,
+		TargetMass: 1.0,
 		Intify:     true,
 		Precision:  8,
 		Tolerance:  1e-8,
@@ -81,7 +81,7 @@ func TestChemicalReaction_checkModeWrong(t *testing.T) {
 	reacOpts := ReacOptions{
 		Rmode:      Check,
 		Target:     0,
-		TargerMass: 1.0,
+		TargetMass: 1.0,
 		Intify:     true,
 		Precision:  8,
 		Tolerance:  1e-8,
@@ -170,7 +170,7 @@ func TestChemicalReaction_isBalancedCheckMode(t *testing.T) {
 	balanced := ReacOptions{
 		Rmode:      Check,
 		Target:     0,
-		TargerMass: 1.0,
+		TargetMass: 1.0,
 		Intify:     true,
 		Precision:  8,
 		Tolerance:  1e-8,

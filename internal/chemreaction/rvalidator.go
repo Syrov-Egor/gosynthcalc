@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+// allowedASCII holds the ASCII characters permitted in a reaction string:
+// letters, digits, the formula punctuation "., ( { [ ) } ] *" and the
+// reaction symbols "=+". allowedExtra holds the few non-ASCII characters
+// that are also accepted: the adduct symbols "·" (U+00B7) and "•" (U+2022).
 var (
 	allowedASCII [128]bool
 	allowedExtra = map[rune]bool{
@@ -28,6 +32,10 @@ func init() {
 	}
 }
 
+// sanitize normalizes a reaction string before validation: whitespace is
+// dropped and every recognized reactants–products separator (see
+// reactionSymbols) is rewritten to the canonical "=" so that the decomposer
+// only has to split on a single character.
 func sanitize(reaction string) string {
 	var res strings.Builder
 	res.Grow(len(reaction))
@@ -45,10 +53,16 @@ func sanitize(reaction string) string {
 	return sanitized
 }
 
+// reactionValidator checks a raw reaction string before it is decomposed.
 type reactionValidator struct {
 	reaction string
 }
 
+// validate runs the checks in order: the string must not be empty, may
+// contain only allowed characters, must carry a reactants–products separator
+// (checked while decomposing) and must separate compounds with at least one
+// "+". On success it returns the [reactionDecomposer] built from the
+// sanitized string.
 func (v reactionValidator) validate() (*reactionDecomposer, error) {
 
 	if v.reaction == "" {
