@@ -342,6 +342,36 @@ func TestMolarMass_oxidePercent_wrongCustomOxides_2(t *testing.T) {
 	})
 }
 
+func TestMolarMass_oxidePercent_malformedCustomOxides(t *testing.T) {
+	m := molarMass{[]Atom{{Label: "Ba", Amount: 1}, {Label: "Fe", Amount: 1}, {Label: "O", Amount: 4}}}
+	for _, formula := range []string{"Fe1.2.3O", "Fe.O", "Fe.", "FeO*", "[Fe)O", "2FeO", "Fe", "O"} {
+		t.Run(formula, func(t *testing.T) {
+			result, err := m.oxidePercent(formula)
+			if err == nil {
+				t.Fatal("oxidePercent() expected error, got nil")
+			}
+			if result != nil {
+				t.Errorf("oxidePercent() returned a result on failure: %v", result)
+			}
+		})
+	}
+}
+
+func TestMolarMass_oxidePercent_normalizedCustomOxide(t *testing.T) {
+	m := molarMass{[]Atom{{Label: "Ba", Amount: 1}, {Label: "Fe", Amount: 1}, {Label: "O", Amount: 4}}}
+	got, err := m.oxidePercent("[Fe]3O4")
+	if err != nil {
+		t.Fatalf("oxidePercent() unexpected error: %v", err)
+	}
+	expected := []Atom{
+		{Label: "BaO", Amount: 66.51800627323722},
+		{Label: "[Fe]3O4", Amount: 33.48199372676278},
+	}
+	if !slices.Equal(got, expected) {
+		t.Errorf("oxidePercent() = %v, expected %v", got, expected)
+	}
+}
+
 /*
 
  */

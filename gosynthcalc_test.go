@@ -1,112 +1,176 @@
 package gosynthcalc
 
 import (
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
+	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
-func setup(fname string) ([]ChemicalReaction, []ChemicalFormula) {
-	file, err := os.Open(fname)
+type benchmarkSkippedReaction struct {
+	line     int
+	reaction string
+	err      error
+}
+
+type benchmarkData struct {
+	formulas  []string
+	reactions []string
+	skipped   []benchmarkSkippedReaction
+}
+
+func loadBenchmarkData(reader io.Reader) (benchmarkData, error) {
+	data := benchmarkData{}
+	b, err := io.ReadAll(reader)
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		if err = file.Close(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-	b, err := io.ReadAll(file)
-	if err != nil {
-		log.Fatal(err)
+		return data, fmt.Errorf("read benchmark dataset: %w", err)
 	}
 	reactionsStr := strings.Split(string(b), "\n")
-	reactions := []ChemicalReaction{}
-	formulas := []ChemicalFormula{}
-	for _, reac := range reactionsStr {
+
+	for i, reac := range reactionsStr {
 		if strings.TrimSpace(reac) == "" {
 			continue
 		}
 		reacO, err := NewChemicalReaction(reac)
 		if err != nil {
-			panic(err)
+			data.skipped = append(data.skipped, benchmarkSkippedReaction{i + 1, reac, err})
+			continue
 		}
-		reactions = append(reactions, *reacO)
+
 		forms, err := reacO.ChemFormulas()
 		if err != nil {
-			panic(err)
+			data.skipped = append(data.skipped, benchmarkSkippedReaction{i + 1, reac, err})
+			continue
 		}
-		formulas = append(formulas, forms...)
+		data.reactions = append(data.reactions, reac)
+		for _, f := range forms {
+			data.formulas = append(data.formulas, f.Formula())
+		}
 	}
-	return reactions, formulas
+	if len(data.reactions) == 0 || len(data.formulas) == 0 {
+		return data, fmt.Errorf("no valid benchmark reactions")
+	}
+	return data, nil
+}
+
+func setup(tb testing.TB, fname string) ([]string, []string) {
+	tb.Helper()
+	file, err := os.Open(fname)
+	if err != nil {
+		tb.Fatalf("open benchmark dataset %q: %v", fname, err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			tb.Errorf("close benchmark dataset %q: %v", fname, err)
+		}
+	}()
+
+	data, err := loadBenchmarkData(file)
+	for _, skipped := range data.skipped[:min(len(data.skipped), 5)] {
+		tb.Logf("%s:%d: skipped reaction %q: %v", fname, skipped.line, skipped.reaction, skipped.err)
+	}
+	if err != nil {
+		tb.Fatalf("load benchmark dataset %q: %v", fname, err)
+	}
+	return data.formulas, data.reactions
 }
 
 func BenchmarkChemicalFormula_output(b *testing.B) {
-	_, formulas := setup("data/text_mined_reactions.txt")
+	b.ReportAllocs()
+	formulas, _ := setup(b, "data/text_mined_reactions.txt")
+	n := len(formulas)
 
-	f, err := os.Create("data/formula_output.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer f.Close()
-
-	var totalTime time.Duration
-	var calls int64
-
+	i := 0
 	for b.Loop() {
-		for _, form := range formulas {
-			start := time.Now()
-			out := form.Output()
-			_, err := f.WriteString(out.String() + "\n")
-			totalTime += time.Since(start)
-			calls++
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	}
+		form := formulas[i%n]
+		i++
 
-	if calls > 0 {
-		avgTimeMilli := float64(totalTime.Microseconds()) / float64(calls)
-		b.ReportMetric(avgTimeMilli, "μs/formula")
+		formulaObj, err := NewChemicalFormula(form)
+		if err != nil {
+			b.Fatalf("formula %q: %v", form, err)
+		}
+		_ = formulaObj.Output()
 	}
 }
 
 func BenchmarkChemicalReaction_output(b *testing.B) {
-	reactions, _ := setup("data/text_mined_reactions.txt")
+	b.ReportAllocs()
+	_, reactions := setup(b, "data/text_mined_reactions.txt")
+	n := len(reactions)
 
-	f, err := os.Create("data/reaction_output.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer f.Close()
-
-	var totalTime time.Duration
-	var calls int64
-
+	i := 0
 	for b.Loop() {
-		for idx, reac := range reactions {
-			start := time.Now()
-			out, oerr := reac.Output()
-			if oerr != nil {
-				b.Fatalf("Error at reaction %d: %v", idx, oerr)
-			}
-			_, err := fmt.Fprintf(f, "%s\n", out)
-			totalTime += time.Since(start)
-			calls++
-			if err != nil {
-				b.Fatal(err)
-			}
+		reac := reactions[i%n]
+		i++
+
+		reactionObj, err := NewChemicalReaction(reac)
+		if err != nil {
+			b.Fatalf("reaction %q: %v", reac, err)
+		}
+		if _, err := reactionObj.Output(); err != nil {
+			b.Fatalf("reaction %q: %v", reac, err)
 		}
 	}
+}
 
-	if calls > 0 {
-		avgTimeMilli := float64(totalTime.Microseconds()) / float64(calls)
-		b.ReportMetric(avgTimeMilli, "μs/reaction")
+func TestLoadBenchmarkData(t *testing.T) {
+	input := "\n2H2+O2==2H2O\nH2+O2==H1.2.3O\nBaCuO2(011)+Y2O3==Y2BaCuO5\nnot a reaction\n\nNaOH+HCl==NaCl+H2O\n"
+	data, err := loadBenchmarkData(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("loadBenchmarkData() unexpected error: %v", err)
+	}
+	wantReactions := []string{"2H2+O2==2H2O", "NaOH+HCl==NaCl+H2O"}
+	wantFormulas := []string{"H2", "O2", "H2O", "NaOH", "HCl", "NaCl", "H2O"}
+	if !slices.Equal(data.reactions, wantReactions) {
+		t.Errorf("reactions = %v, expected %v", data.reactions, wantReactions)
+	}
+	if !slices.Equal(data.formulas, wantFormulas) {
+		t.Errorf("formulas = %v, expected %v", data.formulas, wantFormulas)
+	}
+	if len(data.skipped) != 3 {
+		t.Fatalf("skipped %d records, expected 3", len(data.skipped))
+	}
+	for i, skipped := range data.skipped {
+		if skipped.line != i+3 || skipped.reaction == "" || skipped.err == nil {
+			t.Errorf("incomplete skipped-record diagnostic: %+v", skipped)
+		}
+	}
+}
+
+func TestLoadBenchmarkData_empty(t *testing.T) {
+	for _, input := range []string{"", " \n\n", "H2+O2==H1.2.3O\nnot a reaction\n"} {
+		t.Run(input, func(t *testing.T) {
+			data, err := loadBenchmarkData(strings.NewReader(input))
+			if err == nil || !strings.Contains(err.Error(), "no valid benchmark reactions") {
+				t.Errorf("loadBenchmarkData() error = %v, expected no valid benchmark reactions", err)
+			}
+			if len(data.formulas) != 0 || len(data.reactions) != 0 {
+				t.Errorf("loadBenchmarkData() retained invalid records: %+v", data)
+			}
+		})
+	}
+}
+
+type benchmarkErrorReader struct{}
+
+func (benchmarkErrorReader) Read([]byte) (int, error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
+func TestLoadBenchmarkData_readError(t *testing.T) {
+	_, err := loadBenchmarkData(benchmarkErrorReader{})
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Errorf("loadBenchmarkData() error = %v, expected unexpected EOF", err)
+	}
+}
+
+func TestBenchmarkDataset(t *testing.T) {
+	formulas, reactions := setup(t, "data/text_mined_reactions.txt")
+	if len(formulas) == 0 || len(reactions) == 0 {
+		t.Fatal("benchmark dataset has no usable records")
 	}
 }
 

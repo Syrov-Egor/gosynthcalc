@@ -282,6 +282,27 @@ func TestNewSimpleFraction(t *testing.T) {
 			expectedNum:    22,
 			expectedDen:    7,
 		},
+		{
+			name:           "integer above max denominator is not clamped",
+			input:          1000001,
+			maxDenominator: 1000000,
+			expectedNum:    1000001,
+			expectedDen:    1,
+		},
+		{
+			name:           "integer at max denominator",
+			input:          1000000,
+			maxDenominator: 1000000,
+			expectedNum:    1000000,
+			expectedDen:    1,
+		},
+		{
+			name:           "negative integer above max denominator is not clamped",
+			input:          -1000001,
+			maxDenominator: 1000000,
+			expectedNum:    -1000001,
+			expectedDen:    1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -309,6 +330,24 @@ func TestNewSimpleFractionSpecialCases(t *testing.T) {
 	result = NewSimpleFraction(math.Inf(-1), 100)
 	if result.Num != 0 || result.Den != 1 {
 		t.Errorf("NewSimpleFraction(-Inf, 100) = %d/%d, want 0/1", result.Num, result.Den)
+	}
+}
+
+func TestNewSimpleFractionNeverClampsValue(t *testing.T) {
+	result := NewSimpleFraction(1000000.5, 1000000)
+	if result.Num != 1000001 || result.Den != 1 {
+		t.Errorf("NewSimpleFraction(1000000.5, 1000000) = %d/%d, want 1000001/1",
+			result.Num, result.Den)
+	}
+
+	result = NewSimpleFraction(1e300, 1000000)
+	if result.Num != 0 || result.Den != 0 {
+		t.Errorf("NewSimpleFraction(1e300, 1000000) = %d/%d, want 0/0", result.Num, result.Den)
+	}
+
+	result = NewSimpleFraction(-1e300, 1000000)
+	if result.Num != 0 || result.Den != 0 {
+		t.Errorf("NewSimpleFraction(-1e300, 1000000) = %d/%d, want 0/0", result.Num, result.Den)
 	}
 }
 

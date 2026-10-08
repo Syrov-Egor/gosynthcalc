@@ -5,6 +5,16 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+// createReacMatrix builds the reaction matrix out of the parsed formulas:
+// rows are the distinct elements in the order of their first appearance in
+// the reaction, columns are the compounds, and the entry (i, j) holds the
+// amount of element i in compound j. A zero means the element is absent from
+// that compound.
+//
+// The first implementation of the reaction matrix method probably belongs to
+// [Blakley](https://doi.org/10.1021/ed059p728). In general, a chemical
+// reaction matrix is composed of the coefficients of each atom in each
+// compound, giving a 2D array.
 func createReacMatrix(parsedFormulas [][]chemformula.Atom) *mat.Dense {
 	atomMap := make(map[string]int)
 	var atomOrder []string

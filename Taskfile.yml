@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+silent: true
+set: [pipefail]
+
+vars:
+  BENCH_COUNT: 10
+  PROF_DIR: "prof"
+
+tasks:
+  default:
+    desc: "Task runner for gosynthcalc package"
+    cmds:
+      - echo "Task runner for gosynthcalc package. To see all of the tasks, run 'task --list'"
+
+  test:
+    desc: "Run all unit tests"
+    cmds:
+      - go test ./...
+  
+  bench-formula:
+    desc: "Run chemformula benchmark"
+    cmds:
+      - task: run-benchmark
+        vars:
+          BENCHMARK: BenchmarkChemicalFormula_output
+
+  bench-reaction:
+    desc: "Run chemreaction benchmark"
+    cmds:
+      - task: run-benchmark
+        vars:
+          BENCHMARK: BenchmarkChemicalReaction_output
+
+  run-benchmark:
+    internal: true
+    cmds:
+      - |
+        output=$(mktemp)
+        trap 'rm -f "$output"' EXIT
+        if go test -bench='^{{.BENCHMARK}}$' -count={{.BENCH_COUNT}} -run='^$' >"$output" 2>&1; then
+          # Show corpus diagnostics once, even when running multiple samples.
+          awk '/benchmark dataset|skipped reaction/ && !seen[$0]++' "$output" >&2
+          benchstat - <"$output"
+        else
+          status=$?
+          cat "$output" >&2
+          exit "$status"
+        fi
+  
+  bench:
+    desc: "Run all benchmarks"
+    cmds:
+      - echo "Formula:"
+      - task: bench-formula
+      - echo "Reaction:"
+      - task: bench-reaction
+  
+  ensure-prof-dir:
+    internal: true
+    desc: "Ensure that profile directory exist"
+    cmds:
+      - mkdir -p {{.PROF_DIR}}
+
+  clean-prof:
+    internal: true
+    desc: "Remove all profile artifacts but keep the prof directory"
+    cmds:
+      - rm -f {{.PROF_DIR}}/*
+
+  prof-formula:
+    desc: "Run pprof profiler on chemformula benchmark"
+    deps: [ensure-prof-dir]
+    cmds:
+      - go test -bench=BenchmarkChemicalFormula_output -run='^$' -benchtime=2s -cpuprofile={{.PROF_DIR}}/cpu_formula.pprof -memprofile={{.PROF_DIR}}/mem_formula.pprof -o {{.PROF_DIR}}/formula.test > /dev/null
+  
+  prof-reaction:
+    desc: "Run pprof profiler on chemreaction benchmark"
+    deps: [ensure-prof-dir]
+    cmds:
+      - go test -bench=BenchmarkChemicalReaction_output -run='^$' -benchtime=2s -cpuprofile={{.PROF_DIR}}/cpu_reaction.pprof -memprofile={{.PROF_DIR}}/mem_reaction.pprof -o {{.PROF_DIR}}/reaction.test > /dev/null
+  
+  prof:
+    desc: "Run all profiles"
+    deps: [ensure-prof-dir, clean-prof]
+    cmds:
+      - task: prof-formula
+      - task: prof-reaction
+      - echo "Profiling done. Results are in /{{.PROF_DIR}}"
+  
+  watch-prof:
+    desc: "Open a CLI interface to watch pprof results. OBJECT is 'reaction' or 'formula'. TYPE is 'cpu' or 'mem'. AGRS are any additional arguments (like '-alloc_objects')"
+    deps: [ensure-prof-dir]
+    cmds:
+      - go tool pprof {{.ARGS}} {{.PROF_DIR}}/{{.OBJECT}}.test {{.PROF_DIR}}/{{.TYPE}}_{{.OBJECT}}.pprof
