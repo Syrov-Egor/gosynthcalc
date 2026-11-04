@@ -19,7 +19,7 @@
 //	reacOpts := g.ReactionOptions{
 //	                Rmode:       Balance,
 //	                Target:     0,
-//	                TargerMass: 3.0,
+//	                TargetMass: 3.0,
 //	                Intify:     true,
 //	                Precision:  8,
 //	                Tolerance:  1e-8,
@@ -86,7 +86,7 @@ type ChemicalReaction = chemreaction.ChemicalReaction
 //	ReacOptions{
 //					Rmode:       Balance,
 //					Target:     0,
-//					TargerMass: 1.0,
+//					TargetMass: 1.0,
 //					Intify:     true,
 //					Precision:  8,
 //					Tolerance:  1e-8,

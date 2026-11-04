@@ -20,7 +20,7 @@ Now, we can create a chemical reaction object of the ChemicalReaction struct, wh
 reacOpts := g.ReactionOptions{
                 Rmode:       Balance,
                 Target:     0,
-	            TargerMass: 3.0,
+	            TargetMass: 3.0,
 	            Intify:     true,
 	            Precision:  8,
 	            Tolerance:  1e-8,
@@ -95,7 +95,7 @@ fmt.Println(reac.FinalReaction())
 reacOpts := g.ReactionOptions{
 		Rmode:      Force,
 		Target:     0,
-		TargerMass: 1.0,
+		TargetMass: 1.0,
 		Intify:     true,
 		Precision:  8,
 		Tolerance:  1e-8,
@@ -108,7 +108,7 @@ fmt.Println(reaction.Masses())
 reacOpts := g.ReactionOptions{
 		Rmode:      Check,
 		Target:     0,
-		TargerMass: 1.0,
+		TargetMass: 1.0,
 		Intify:     true,
 		Precision:  8,
 		Tolerance:  1e-8,
