@@ -12,6 +12,8 @@
 
 main.go
 gosynthcalc
+literature/
+reports/
 formula_output.txt
 reaction_output.txt
 
