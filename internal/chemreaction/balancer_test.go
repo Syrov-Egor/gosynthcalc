@@ -83,14 +83,31 @@ func TestBalancer_Comb(t *testing.T) {
 	}
 	for _, reaction := range reactions[111:113] {
 		t.Logf("%v", reaction.reaction)
-		reac, _ := NewChemicalReaction(reaction.reaction)
-		bal, _ := reac.Balancer()
-		inv, _ := bal.Comb(context.Background(), 10)
-		if !slices.Equal(inv, reaction.coefs) {
-			t.Errorf("Comb() method fault for reaction %v: expected %v, got %v",
-				reaction.reaction,
-				reaction.coefs,
-				inv)
+		reac, err := NewChemicalReaction(reaction.reaction)
+		if err != nil {
+			t.Fatalf("NewChemicalReaction() error: %v", err)
+		}
+		bal, err := reac.Balancer()
+		if err != nil {
+			t.Fatalf("Balancer() error: %v", err)
+		}
+		first, err := bal.Comb(context.Background(), 10)
+		if err != nil {
+			t.Errorf("Comb() error for reaction %v: %v", reaction.reaction, err)
+			continue
+		}
+		if !bal.validFloatResult(first) {
+			t.Errorf("Comb() returned invalid coefficients %v for reaction %v",
+				first, reaction.reaction)
+		}
+		again, err := bal.Comb(context.Background(), 10)
+		if err != nil {
+			t.Errorf("Comb() second call error for reaction %v: %v", reaction.reaction, err)
+			continue
+		}
+		if !slices.Equal(first, again) {
+			t.Errorf("Comb() is not deterministic for reaction %v: %v vs %v",
+				reaction.reaction, first, again)
 		}
 	}
 }

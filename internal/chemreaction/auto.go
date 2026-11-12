@@ -135,12 +135,20 @@ func (b *balancer) calculateLegacyByMethod(ctx context.Context, method string, m
 	var err error
 	switch method {
 	case MethodGPInv:
-		coefficients, err = b.bAlgos.gPInvAlgorithm()
+		a, analysisErr := b.analysis()
+		if analysisErr != nil {
+			return nil, fmt.Errorf("%w: %w", errm, analysisErr)
+		}
+		coefficients, err = b.bAlgos.gPInvAlgorithm(a.rank)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errm, err)
 		}
 	case MethodPPInv:
-		coefficients, err = b.bAlgos.pPInvAlgorithm()
+		reactantRank, rankErr := exactDenseRank(b.bAlgos.ReactantMatrix)
+		if rankErr != nil {
+			return nil, fmt.Errorf("%w: %w", errm, rankErr)
+		}
+		coefficients, err = b.bAlgos.pPInvAlgorithm(reactantRank)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errm, err)
 		}
@@ -150,6 +158,11 @@ func (b *balancer) calculateLegacyByMethod(ctx context.Context, method string, m
 		}
 		coefficients = b.bAlgos.combinatorial(ctx, maxCoef[0])
 		if coefficients == nil {
+			if ctx != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return nil, fmt.Errorf("%w: %w", errm, ctxErr)
+				}
+			}
 			return nil, fmt.Errorf("%w: no combination balances the reaction", errm)
 		}
 	default:

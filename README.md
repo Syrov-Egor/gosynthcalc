@@ -24,6 +24,7 @@ reacOpts := g.ReactionOptions{
 	            Intify:     true,
 	            Precision:  8,
 	            Tolerance:  1e-8,
+	            Strategy:   g.StrategyExact,
 	            }
 reaction, _ := g.NewChemicalReaction(reactionStr, reacOpts) // Errors are supressed in this example
 ```
@@ -67,6 +68,7 @@ form, _ := g.NewChemicalFormula("C2H5OH")
 fmt.Println(form.ParsedFormula())
 //['C': 2 'H': 6 'O': 1]
 ```
+* Exact rational parsing of fractional formula groups such as `(Ga0.9Sc0.1)3`, so nested group multipliers do not introduce binary floating-point artifacts.
 * Calculation of the molar mass 
 ```Go
 form, _ := g.NewChemicalFormula("C2H5OH")
@@ -83,12 +85,17 @@ fmt.Println(form.OxidePercent())
 //['C': 22.22222222 'H': 66.66666667 'O': 11.11111111]
 //['CO2': 61.95701907 'H2O': 38.04298093]
 ```
-* Auto-balancing chemical equations by 4 different matrix methods in `Balance` mode:
+* Auto-balancing chemical equations in `Balance` mode. The default `StrategyExact` uses exact rational arithmetic: a nullity-one reaction is solved from its exact null-space direction, and higher-nullity reactions use the exact Phase-I simplex. The legacy heuristics remain available through `StrategyLegacy`.
 ```Go
 reacStr := "K4Fe(CN)6 + KMnO4 + H2SO4 = KHSO4 + Fe2(SO4)3 + MnSO4 + HNO3 + CO2 + H2O"
 reac, _ := g.NewChemicalReaction(reacStr)
 fmt.Println(reac.FinalReaction())
 //10K4Fe(CN)6+122KMnO4+299H2SO4=162KHSO4+5Fe2(SO4)3+122MnSO4+60HNO3+60CO2+188H2O
+```
+* Full-precision coefficients that do not fit in `float64`:
+```Go
+exact, _ := reac.CoefficientsExact()
+fmt.Println(exact.Method, exact.Result) // exact primitive integers
 ```
 * Calculation of masses for user-defined coefficients in `Force` (calculates regardless of balance) and `Check` (checks if reaction is balanced by user-defined coefficients) modes.
 ```Go
@@ -122,7 +129,7 @@ if err != nil {
 fmt.Println(coefs.Result)
 //Reaction is not balanced
 ```
-* Calculation of coefficients individually by each of 4 different algorithms (inverse, general pseudoinverse, partial pseudoinverse and combinatorial algorithms).  
+* Calculation of coefficients individually: exact nullity-one (`Inv`), exact universal simplex (`Universal`/`UniversalExact`), and the legacy inverse, general-pseudoinverse, partial-pseudoinverse and bounded combinatorial algorithms. `Comb` is a deterministic, bounded diagnostic and is not used by `Auto`.
 
 ## License
 The code is provided under the MIT license.

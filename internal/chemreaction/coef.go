@@ -38,7 +38,7 @@ func (c *coeffs) calculateCoeffs() (MethodResult, error) {
 		if isReactionBalanced(c.balancer.bAlgos.ReactantMatrix,
 			c.balancer.bAlgos.ProductMatrix,
 			c.decomposedReaction.initCoefs,
-			c.balancer.tolerance) {
+			scaledTolerance(c.decomposedReaction.initCoefs, c.balancer.tolerance)) {
 			return MethodResult{Method: user, Result: c.decomposedReaction.initCoefs}, nil
 		} else {
 			return MethodResult{Method: user, Result: nil}, fmt.Errorf("reaction is not balanced")

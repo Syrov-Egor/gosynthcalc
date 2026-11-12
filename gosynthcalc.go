@@ -121,6 +121,10 @@ const (
 
 type MethodResult = chemreaction.MethodResult
 
+// ExactMethodResult is the full-precision primitive-integer counterpart of
+// [MethodResult].
+type ExactMethodResult = chemreaction.ExactMethodResult
+
 // BalanceStrategy selects how automatic coefficients are calculated.
 type BalanceStrategy = chemreaction.BalanceStrategy
 

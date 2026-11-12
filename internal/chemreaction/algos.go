@@ -1,13 +1,9 @@
 package chemreaction
 
 import (
-	"context"
 	"fmt"
-	"runtime"
-	"sync"
-	"sync/atomic"
+	"math"
 
-	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -23,8 +19,9 @@ import (
 //   - ReactantMatrix and ProductMatrix are the left and right halves;
 //   - ReactantRows, ProductRows, ReactantCols and ProductCols are their
 //     dimensions (both row counts equal the number of elements);
-//   - Tolerance is the absolute tolerance used for ranks, pseudoinverses and
-//     balance comparisons.
+//   - Tolerance is the legacy float tolerance used by the heuristics; rank
+//     truncation treats it as relative, and balance checks scale it by the
+//     coefficient magnitude. The exact router does not use it.
 type balancingAlgos struct {
 	ReactionMatrix *mat.Dense
 	SeparatorPos   int
@@ -81,31 +78,23 @@ func newBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 // gPInvAlgorithm computes the coefficients with the matrix general
 // pseudoinverse algorithm proposed by
 // [Risteski](http://koreascience.or.kr/article/JAKO201314358624990.page).
-// There are other articles and methods of chemical equation balancing by
-// this author, however, this particular algorithm seems to be the most
-// convenient for matrix calculations. The algorithm can be described in
-// steps:
+// It stacks the reactant matrix and the negated product matrix, computes the
+// Moore-Penrose pseudoinverse A⁺ and projects the ones vector onto the null
+// space:
 //
-//  1. Stack reactant matrix and negative product matrix.
+//	x = (I - A⁺ A) 1.
 //
-//  2. Calculate MP pseudoinverse of this matrix.
+// The projection is always a null vector, but it is not guaranteed to be
+// strictly positive. For nullity 1 and a positive null direction it is a
+// positive multiple of the solution; for nullity 2 or more it can leave the
+// positive orthant. A non-positive candidate is reported as
+// [ErrMethodNotPositive]; a failed heuristic does not prove infeasibility.
 //
-//  3. Calculate coefficients by formula:
-//     x = (I – A⁺A)a, where x is the coefficients vector,
-//     I - identity matrix, A⁺ - MP inverse, A - matrix,
-//     a - arbitrary vector (in this case, vector of ones).
-//
-// Note: this method is more general than Thorne's method, although it has
-// some peculiarities of its own. First of all, the output of this method is
-// a float array, so, to generate an int coefs list, it needs to be converted,
-// which does not always lead to a good result. Secondly, MP pseudoinverse is
-// sensitive to row order in the reaction matrix. The rows should be ordered
-// by atoms appearance in the reaction string.
-//
-// The returned vector still contains the raw (possibly negative) values;
-// rounding, intification and validation happen in
-// [balancer.calculateLegacyByMethod].
-func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
+// rank is the exact signed-matrix rank from the balancer's exact analysis.
+// Using it instead of an absolute SVD tolerance makes the truncation
+// deterministic. The returned vector contains raw float values; rounding,
+// intification and validation happen in [balancer.calculateLegacyByMethod].
+func (b *balancingAlgos) gPInvAlgorithm(rank int) ([]float64, error) {
 	rows, cols := b.ReactionMatrix.Dims()
 
 	matrix := mat.NewDense(rows, cols, nil)
@@ -117,7 +106,7 @@ func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 		}
 	}
 
-	inverse, err := computePseudoinverse(matrix, b.Tolerance)
+	inverse, err := computePseudoinverse(matrix, rank)
 	if err != nil {
 		return nil, err
 	}
@@ -145,41 +134,36 @@ func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 		result[i] = coefs.AtVec(i)
 	}
 
+	if !allStrictlyPositive(result, b.Tolerance) {
+		return nil, fmt.Errorf("%w: gpinv projection is not strictly positive", ErrMethodNotPositive)
+	}
 	return result, nil
 }
 
 // pPInvAlgorithm computes the coefficients with the matrix partial
 // pseudoinverse algorithm also proposed by
 // [Risteski](https://www.koreascience.or.kr/article/JAKO200802727293429.page).
-// The method is founded on the virtue of the solution of a Diophantine
-// matrix equation by using the Moore-Penrose pseudoinverse matrix.
+// It uses the general solution
 //
-// The algorithm can be described in steps:
+//	G = (I - A A⁺) B,   y = (I - G⁺ G) u,   x = A⁺ B y + (I - A⁺ A) v
 //
-//  1. Take the Moore-Penrose pseudoinverse of the reactant matrix.
+// with the arbitrary choice u = v = 1, and returns [x, y].
 //
-//  2. Create a G matrix in the form of (I-AA^-)B, where I is the identity
-//     matrix, A is the reactant matrix, A^- is the MP pseudoinverse of A and
-//     B is the product matrix.
+// The choice u = v = 1 does not guarantee positivity, so the method is a
+// heuristic. When G is zero, G⁺ is zero and (I - G⁺G) is the identity, so
+// y = u directly; this branch is handled explicitly instead of asking for the
+// pseudoinverse of a zero matrix. A non-positive candidate is reported as
+// [ErrMethodNotPositive], never as infeasibility.
 //
-//  3. Then, the vector y (coefficients of products) is equal to (I-G^-G)u.
-//
-//  4. Vector x (coefficients of reactants) is equal to A^-By + (I-A^-A)v,
-//     where u and v are columns of ones.
-//
-// The result is [x, y]: the reactant coefficients followed by the product
-// coefficients.
-//
-// Note: while this algorithm and [balancingAlgos.gPInvAlgorithm] are very
-// similar, there are some differences in output results. This method exists
-// mostly for legacy purposes, like balancing some reactions according to
-// Risteski.
-func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
+// reactantRank is the exact rank of the reactant matrix. The rank of the
+// intermediate G matrix is estimated with the legacy relative-tolerance SVD
+// helper because G is already a floating-point intermediate.
+func (b *balancingAlgos) pPInvAlgorithm(reactantRank int) ([]float64, error) {
 	reactantRows, reactantCols := b.ReactantMatrix.Dims()
 
-	mpInverse, err := computePseudoinverse(b.ReactantMatrix, b.Tolerance)
+	mpInverse, err := computePseudoinverse(b.ReactantMatrix, reactantRank)
 	if err != nil {
-		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %s", err)
+		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %w", err)
 	}
 
 	identity := mat.NewDense(reactantRows, reactantRows, nil)
@@ -194,9 +178,26 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	var gMatrix mat.Dense
 	gMatrix.Mul(&tempIdentity, b.ProductMatrix)
 
-	gPinv, err := computePseudoinverse(&gMatrix, b.Tolerance)
-	if err != nil {
-		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %s", err)
+	// G = (I - A A⁺)B is mathematically zero when B lies in the column
+	// space of A. In floating point it can be tiny non-zero noise, so use a
+	// scale-aware zero test before falling back to the relative SVD rank.
+	gRank := 0
+	if !denseIsZero(&gMatrix, b.Tolerance*max(1.0, denseMaxAbs(b.ProductMatrix))) {
+		gRank, _, err = matrixRank(&gMatrix, b.Tolerance)
+		if err != nil {
+			return nil, fmt.Errorf("error computing rank of G: %w", err)
+		}
+	}
+
+	var gPinv *mat.Dense
+	if gRank == 0 {
+		// G = 0  =>  G⁺ = 0  =>  (I - G⁺G) = I  =>  y = u.
+		gPinv = mat.NewDense(b.ProductCols, reactantRows, nil)
+	} else {
+		gPinv, err = computePseudoinverse(&gMatrix, gRank)
+		if err != nil {
+			return nil, fmt.Errorf("error computing pseudoinverse of G: %w", err)
+		}
 	}
 
 	var gPinvG mat.Dense
@@ -259,126 +260,32 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 		coefs[reactantCols+i] = yVector.AtVec(i)
 	}
 
+	if !allStrictlyPositive(coefs, b.Tolerance) {
+		return nil, fmt.Errorf("%w: ppinv result is not strictly positive", ErrMethodNotPositive)
+	}
 	return coefs, nil
 }
 
-// combinatorial finds a solution of a Diophantine matrix equation by simply
-// enumerating candidate coefficient vectors: one coefficient per compound,
-// each between 1 and maxCoef, is generated by
-// [multiCombinationGenerator] and tested until the weighted reactant and
-// product column sums agree within Tolerance.
-//
-// The candidates are produced and checked by GOMAXPROCS workers in parallel;
-// the first solution found wins, so smaller coefficients are likely to be
-// reported first. The search honours ctx: it stops when the context is
-// cancelled and returns nil in that case, as well as when no combination
-// balances the reaction.
-//
-// The method is only practical for reactions with a small number of
-// compounds, since the search space grows as maxCoef**number_of_compounds.
-// Progress is printed to stdout by the generator.
-func (b *balancingAlgos) combinatorial(ctx context.Context, maxCoef uint) []float64 {
-	iMaxCoef := int(maxCoef)
-	_, cols := b.ReactionMatrix.Dims()
-	numWorkers := runtime.GOMAXPROCS(0)
-	gen := newMultiCombinationGenerator(iMaxCoef, cols)
-	combinations := gen.generate(ctx, numWorkers)
-
-	resultChan := make(chan []int, 1)
-	var activeWorkers atomic.Int32
-	var wg sync.WaitGroup
-
-	for range numWorkers {
-		wg.Go(func() {
-			reacSum := make([]float64, b.ReactantRows)
-			prodSum := make([]float64, b.ProductRows)
-
-			for {
-				select {
-				case <-ctx.Done(): // Handle cancellation
-					return
-				case arr, ok := <-combinations:
-					if !ok {
-						return
-					}
-					for arr = range combinations {
-						select {
-						case result := <-resultChan:
-							resultChan <- result
-							return
-						default:
-						}
-
-						activeWorkers.Add(1)
-
-						reactantCoefs := arr[:b.SeparatorPos]
-						productCoefs := arr[b.SeparatorPos:]
-
-						mulAndSum(b.ReactantMatrix, reactantCoefs, reacSum, b.ReactantRows, b.ReactantCols)
-						mulAndSum(b.ProductMatrix, productCoefs, prodSum, b.ProductRows, b.ProductCols)
-
-						if floats.EqualApprox(reacSum, prodSum, b.Tolerance) {
-							solution := arr
-							select {
-							case resultChan <- solution:
-							default:
-							}
-						}
-						activeWorkers.Add(-1)
-					}
-				}
-			}
-		})
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil
-	case result, ok := <-resultChan:
-		if !ok {
-			return nil
-		}
-		fmt.Println()
-		toFloat := make([]float64, len(result))
-		for i, r := range result {
-			toFloat[i] = float64(r)
-		}
-		return toFloat
-	}
-}
-
-// mulAndSum computes result = matrix · vector in place for an integer
-// coefficient vector (used to score candidate combinations quickly).
-func mulAndSum(matrix *mat.Dense, vector []int, result []float64, rows int, cols int) {
-	for row := range rows {
-		result[row] = 0
-		for col := range cols {
-			result[row] += matrix.At(row, col) * float64(vector[col])
-		}
-	}
-}
-
 // computePseudoinverse returns the Moore-Penrose pseudoinverse of matrix as
-// a cols×rows dense matrix. It is computed from the truncated SVD of the
-// matrix: only the rank singular values above tol are kept (rank is the
-// number of singular values greater than tol), which is the least-squares
-// solution gonum's SolveTo expects. It fails if the factorization fails or
-// the matrix has rank 0.
-func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
+// a cols×rows dense matrix, truncated to the supplied rank. A rank of zero
+// returns the zero matrix: this is the mathematically correct pseudoinverse
+// and makes zero matrices usable by the legacy heuristics.
+func computePseudoinverse(matrix *mat.Dense, rank int) (*mat.Dense, error) {
+	if matrix == nil {
+		return nil, fmt.Errorf("%w: nil matrix", ErrInvalidMatrix)
+	}
 	rows, cols := matrix.Dims()
-
-	rank, svd, err := matrixRank(matrix, tol)
-	if err != nil {
-		return nil, err
+	maxRank := min(rows, cols)
+	if rank < 0 || rank > maxRank {
+		return nil, fmt.Errorf("rank %d out of range [0,%d]", rank, maxRank)
+	}
+	if rank == 0 {
+		return mat.NewDense(cols, rows, nil), nil
 	}
 
-	if rank < 1 {
-		return nil, fmt.Errorf("rank %d out of range", rank)
+	var svd mat.SVD
+	if !svd.Factorize(matrix, mat.SVDFull) {
+		return nil, fmt.Errorf("SVD factorization failed")
 	}
 
 	b := mat.NewDense(rows, rows, nil)
@@ -387,17 +294,20 @@ func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
 	}
 
 	inverse := mat.NewDense(cols, rows, nil)
-
 	svd.SolveTo(inverse, b, rank)
-
 	return inverse, nil
 }
 
-// matrixRank returns the rank of m — the number of singular values greater
-// than tol — together with the SVD factorization, so callers that also need
-// the decomposition can reuse it instead of factoring twice. An error is
-// returned when SVD factorization fails.
+// matrixRank returns the rank of m — the number of singular values above a
+// relative threshold — together with the SVD factorization, so callers that
+// also need the decomposition can reuse it. The threshold is
+// tol * max(rows,cols) * σ_max, which is scale-aware unlike the old absolute
+// tolerance. It is used only by legacy diagnostics; the exact router never
+// calls it.
 func matrixRank(m *mat.Dense, tol float64) (int, mat.SVD, error) {
+	if m == nil {
+		return -1, mat.SVD{}, fmt.Errorf("%w: nil matrix", ErrInvalidMatrix)
+	}
 	rows, cols := m.Dims()
 	var svd mat.SVD
 	ok := svd.Factorize(m, mat.SVDFull)
@@ -406,12 +316,83 @@ func matrixRank(m *mat.Dense, tol float64) (int, mat.SVD, error) {
 	}
 	singularValues := make([]float64, min(rows, cols))
 	svd.Values(singularValues)
+	if len(singularValues) == 0 {
+		return 0, svd, nil
+	}
+
+	if tol < 0 {
+		tol = 0
+	}
+	threshold := tol * float64(max(rows, cols)) * singularValues[0]
 	rank := 0
 	for _, val := range singularValues {
-		if val > tol {
+		if val > 0 && val > threshold {
 			rank++
 		}
 	}
-
 	return rank, svd, nil
+}
+
+// denseMaxAbs returns the largest absolute entry of m (0 for an empty
+// matrix).
+func denseMaxAbs(m *mat.Dense) float64 {
+	if m == nil {
+		return 0
+	}
+	rows, cols := m.Dims()
+	maxAbs := 0.0
+	for i := 0; i < rows; i++ {
+		for j := 0; j < cols; j++ {
+			if a := math.Abs(m.At(i, j)); a > maxAbs {
+				maxAbs = a
+			}
+		}
+	}
+	return maxAbs
+}
+
+// denseIsZero reports whether every entry of m is at most tol in absolute
+// value. NaN and infinities make it return false.
+func denseIsZero(m *mat.Dense, tol float64) bool {
+	if m == nil {
+		return true
+	}
+	if tol < 0 {
+		tol = 0
+	}
+	rows, cols := m.Dims()
+	for i := 0; i < rows; i++ {
+		for j := 0; j < cols; j++ {
+			v := m.At(i, j)
+			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > tol {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// allStrictlyPositive reports whether every entry is positive relative to a
+// scaled tolerance. NaN and infinities are rejected.
+func allStrictlyPositive(v []float64, tol float64) bool {
+	if len(v) == 0 {
+		return false
+	}
+	scale := 1.0
+	for _, x := range v {
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			return false
+		}
+		scale += math.Abs(x)
+	}
+	if tol < 0 {
+		tol = 0
+	}
+	atol := tol * scale
+	for _, x := range v {
+		if x <= atol {
+			return false
+		}
+	}
+	return true
 }

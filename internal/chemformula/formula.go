@@ -3,7 +3,9 @@
 // The entry point is [ChemicalFormula]: a formula string is validated and
 // parsed once, and the parsed result is then used to
 // compute the molar mass, mass percent, atomic percent and oxide percent of
-// the compound.
+// the compound. Parsed atom counts are available both as float64 values
+// ([ChemicalFormula.ParsedFormula]) and as exact rational values
+// ([ChemicalFormula.ExactParsedFormula]).
 //
 // # Accepted input
 //
@@ -48,11 +50,12 @@ type ChemicalFormula struct {
 	sanFormula string
 	precision  uint
 
-	parsedFormula []Atom
-	molarMass     *float64
-	massPercent   *[]Atom
-	atomicPercent *[]Atom
-	oxidePercent  map[string][]Atom
+	parsedFormula      []Atom
+	exactParsedFormula []ExactAtom
+	molarMass          *float64
+	massPercent        *[]Atom
+	atomicPercent      *[]Atom
+	oxidePercent       map[string][]Atom
 }
 
 // NewChemicalFormula validates formula, normalizes it and parses it into
@@ -78,16 +81,17 @@ func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, er
 		return nil, err
 	}
 	sanFormula := sanitize(formula)
-	parsed, err := NewParser(sanFormula).parse()
+	parsed, exactParsed, err := NewParser(sanFormula).parseWithExact()
 	if err != nil {
 		return nil, err
 	}
 
 	return &ChemicalFormula{
-		formula:       formula,
-		sanFormula:    sanFormula,
-		precision:     prec,
-		parsedFormula: parsed,
+		formula:            formula,
+		sanFormula:         sanFormula,
+		precision:          prec,
+		parsedFormula:      parsed,
+		exactParsedFormula: exactParsed,
 	}, nil
 }
 
@@ -102,6 +106,15 @@ func (c *ChemicalFormula) Formula() string {
 // of each element in the string.
 func (c *ChemicalFormula) ParsedFormula() []Atom {
 	return c.parsedFormula
+}
+
+// ExactParsedFormula returns the formula as exact rational atoms ordered by
+// the first appearance of each element in the string. It avoids the binary
+// floating-point artifacts that a nested fractional group can acquire when its
+// counts are computed in float64. The returned slice is cached; callers must
+// not modify it.
+func (c *ChemicalFormula) ExactParsedFormula() []ExactAtom {
+	return c.exactParsedFormula
 }
 
 // MolarMass returns the

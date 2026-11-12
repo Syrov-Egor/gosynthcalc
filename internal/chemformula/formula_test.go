@@ -1,6 +1,7 @@
 package chemformula
 
 import (
+	"math/big"
 	"slices"
 	"testing"
 )
@@ -58,6 +59,72 @@ func TestNewChemicalFormula_parsesAndCaches(t *testing.T) {
 			}
 			if formula.Formula() != tt.formula || formula.sanFormula != sanitize(tt.formula) || formula.precision != 6 {
 				t.Error("constructor did not preserve formula, normalization, or precision")
+			}
+		})
+	}
+}
+
+func TestChemicalFormula_ExactParsedFormula(t *testing.T) {
+	tests := []struct {
+		formula string
+		want    []ExactAtom
+	}{
+		{
+			formula: "(Ga0.9Sc0.1)3",
+			want: []ExactAtom{
+				{Label: "Ga", Amount: big.NewRat(27, 10)},
+				{Label: "Sc", Amount: big.NewRat(3, 10)},
+			},
+		},
+		{
+			formula: "(H.5O0.25)1.5",
+			want: []ExactAtom{
+				{Label: "H", Amount: big.NewRat(3, 4)},
+				{Label: "O", Amount: big.NewRat(3, 8)},
+			},
+		},
+		{
+			formula: "CuSO4*.5(H2O)2NaCl",
+			want: []ExactAtom{
+				{Label: "Cu", Amount: big.NewRat(1, 1)},
+				{Label: "S", Amount: big.NewRat(1, 1)},
+				{Label: "O", Amount: big.NewRat(5, 1)},
+				{Label: "H", Amount: big.NewRat(2, 1)},
+				{Label: "Na", Amount: big.NewRat(1, 2)},
+				{Label: "Cl", Amount: big.NewRat(1, 2)},
+			},
+		},
+		{
+			formula: "H0O",
+			want: []ExactAtom{
+				{Label: "H", Amount: new(big.Rat)},
+				{Label: "O", Amount: big.NewRat(1, 1)},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.formula, func(t *testing.T) {
+			formula, err := NewChemicalFormula(tt.formula)
+			if err != nil {
+				t.Fatalf("NewChemicalFormula() error: %v", err)
+			}
+			got := formula.ExactParsedFormula()
+			if len(got) != len(tt.want) {
+				t.Fatalf("ExactParsedFormula() length = %d, want %d", len(got), len(tt.want))
+			}
+			for i := range tt.want {
+				if got[i].Label != tt.want[i].Label {
+					t.Errorf("atom %d label = %q, want %q", i, got[i].Label, tt.want[i].Label)
+				}
+				if got[i].Amount == nil || got[i].Amount.Cmp(tt.want[i].Amount) != 0 {
+					t.Errorf("atom %d amount = %v, want %v", i, got[i].Amount, tt.want[i].Amount)
+				}
+			}
+			if !slices.EqualFunc(got, formula.ExactParsedFormula(), func(a, b ExactAtom) bool {
+				return a.Label == b.Label && a.Amount.Cmp(b.Amount) == 0
+			}) {
+				t.Error("ExactParsedFormula() did not reuse the cached result")
 			}
 		})
 	}

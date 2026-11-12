@@ -51,6 +51,13 @@ type MethodResult struct {
 // coefficient and fraction denominator, see [balancer.intifyCoefs]) is fixed
 // at 1_000_000.
 func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uint, strategy BalanceStrategy, tolerance ...float64) *balancer {
+	return newBalancerWithExact(matrix, nil, separatorPos, intify, precision, strategy, tolerance...)
+}
+
+// newBalancerWithExact is newBalancer with a prebuilt exact reaction matrix.
+// When exact is nil the exact matrix is derived from the float matrix on first
+// use, which keeps direct test/legacy constructions working.
+func newBalancerWithExact(matrix *mat.Dense, exact *exactMatrix, separatorPos int, intify bool, precision uint, strategy BalanceStrategy, tolerance ...float64) *balancer {
 	var tol float64
 	if tolerance == nil {
 		tol = 1e-8
@@ -69,6 +76,7 @@ func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 		bAlgos:         bAlgos,
 		maxDenom:       1_000_000,
 		strategy:       strategy,
+		exact:          exact,
 	}
 }
 
@@ -77,17 +85,21 @@ func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 // RREF, rank, nullity and null-space basis are computed once as well.
 func (b *balancer) exactMatrixAndAnalysis() (*exactMatrix, matrixAnalysis, error) {
 	b.analysisOnce.Do(func() {
-		exact, err := newExactMatrix(b.reactionMatrix, b.separatorPos)
-		if err != nil {
-			b.analysisErr = err
-			return
+		exact := b.exact
+		if exact == nil {
+			var err error
+			exact, err = newExactMatrix(b.reactionMatrix, b.separatorPos)
+			if err != nil {
+				b.analysisErr = err
+				return
+			}
+			b.exact = exact
 		}
 		analysis, err := analyze(exact)
 		if err != nil {
 			b.analysisErr = err
 			return
 		}
-		b.exact = exact
 		b.analysisRes = analysis
 	})
 	return b.exact, b.analysisRes, b.analysisErr
@@ -177,7 +189,8 @@ func (b *balancer) intifyCoefs(coefs []float64, limit int) []float64 {
 // isReactionBalanced reports whether coefficients balance the reaction: the
 // reactant matrix and the product matrix are each multiplied by their half
 // of the coefficient vector, and the two weighted column sums must be equal
-// within atol.
+// within atol. Callers should pass [scaledTolerance] so that large legitimate
+// coefficients are not rejected by an absolute threshold.
 func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coefs []float64, atol float64) bool {
 	reactantRows, reactantCols := reactantMatrix.Dims()
 	productRows, productCols := productMatrix.Dims()
@@ -192,35 +205,43 @@ func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coe
 	return floats.EqualApprox(reacSum, prodSum, atol)
 }
 
+// scaledTolerance returns tolerance scaled by the coefficient magnitude. This
+// avoids false failures for large but legitimate coefficients such as
+// 1000001 while preserving the configured tolerance for small coefficients.
+func scaledTolerance(coefs []float64, tolerance float64) float64 {
+	scale := 1.0
+	for _, coef := range coefs {
+		scale += math.Abs(coef)
+	}
+	return tolerance * scale
+}
+
 // validFloatResult reports whether coefs is an acceptable legacy answer: one
 // finite positive coefficient per compound and a weighted reactant/product
-// balance within a tolerance scaled by the coefficient magnitude. Scaling
-// avoids false failures for large but legitimate coefficients such as
-// 1000001.
+// balance within a coefficient-scaled tolerance.
 func (b *balancer) validFloatResult(coefs []float64) bool {
 	_, matrLength := b.reactionMatrix.Dims()
 	if len(coefs) != matrLength || !allPositive(coefs) {
 		return false
 	}
-	scale := 1.0
 	for _, coef := range coefs {
 		if math.IsNaN(coef) || math.IsInf(coef, 0) {
 			return false
 		}
-		scale += math.Abs(coef)
 	}
 	return isReactionBalanced(
 		b.bAlgos.ReactantMatrix,
 		b.bAlgos.ProductMatrix,
 		coefs,
-		b.tolerance*scale,
+		scaledTolerance(coefs, b.tolerance),
 	)
 }
 
 // Inv computes the coefficients from the exact null space of the signed
-// reaction matrix. It is sound and complete when the nullity is 1: the unique
-// null direction is checked for zero and mixed-sign entries, normalised to a
-// positive primitive integer vector and verified exactly.
+// reaction matrix. It is the exact RREF equivalent of the corrected Thorne
+// null-space construction. It is sound and complete when the nullity is 1: the
+// unique null direction is checked for zero and mixed-sign entries, normalised
+// to a positive primitive integer vector and verified exactly.
 //
 // Nullity 0, or a null direction with a zero or mixed-sign entry, returns an
 // error wrapping [ErrNoPositiveSolution]. Nullity 2 or more returns an error
@@ -249,10 +270,15 @@ func (b *balancer) PPinv() ([]float64, error) {
 
 // Comb computes the coefficients by brute force with
 // [balancingAlgos.combinatorial], enumerating every combination of
-// coefficients between 1 and maxCoef. ctx cancels a running search; an error
-// is returned when no combination balances the reaction.
+// coefficients between 1 and maxCoef. The parallel search is deterministic: it
+// returns the lexicographically first valid vector within the bound. ctx
+// cancels a running search; an error is returned when no combination balances
+// the reaction.
 //
-// Unlike the matrix methods, this one is not attempted by [balancer.Auto].
+// Comb is a bounded, exponential diagnostic. It is incomplete when the true
+// solution exceeds maxCoef, and it is not attempted by [balancer.Auto]. Prefer
+// [balancer.Auto] or [balancer.UniversalExact] for production balancing; Comb
+// remains available for compatibility and comparison.
 func (b *balancer) Comb(ctx context.Context, maxCoef uint) ([]float64, error) {
 	return b.calculateLegacyByMethod(ctx, MethodComb, maxCoef)
 }

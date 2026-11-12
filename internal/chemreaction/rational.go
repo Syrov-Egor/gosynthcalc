@@ -11,12 +11,10 @@ import (
 // ratFromFloat converts a float64 to an exact rational number.
 //
 // The conversion goes through the shortest fixed-point decimal that parses
-// back to v. This recovers values that were written as decimal literals, such
-// as the fractional atom count 14.98, instead of their binary float
-// approximation. For values produced by non-decimal arithmetic (for example a
-// nested group multiplier), the shortest representation may still expose the
-// binary artifact. The planned exact-parser follow-up removes that limitation
-// by carrying rational atom amounts from the formula parser.
+// back to v. Formula atom counts no longer rely on this path: the formula
+// parser carries exact rational amounts in parallel and the balancer uses
+// them directly. This helper remains for other float inputs, such as
+// user-supplied coefficients or legacy results.
 //
 // NaN and infinities are rejected with [ErrNonFiniteMatrix].
 func ratFromFloat(v float64) (*big.Rat, error) {
@@ -97,6 +95,28 @@ func exactBalances(A *exactMatrix, z []*big.Int) bool {
 		}
 	}
 	return true
+}
+
+// exactIntegerCoefficients converts a float coefficient vector to exact
+// integers when every value is finite and integral. It returns false when any
+// value is fractional or non-finite. Values are interpreted through their
+// shortest decimal representation, consistently with [ratFromFloat].
+func exactIntegerCoefficients(coefs []float64) ([]*big.Int, bool) {
+	if len(coefs) == 0 {
+		return nil, false
+	}
+	out := make([]*big.Int, len(coefs))
+	for i, f := range coefs {
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil, false
+		}
+		r, err := ratFromFloat(f)
+		if err != nil || !r.IsInt() {
+			return nil, false
+		}
+		out[i] = new(big.Int).Set(r.Num())
+	}
+	return out, true
 }
 
 // validExactResult reports whether z is an acceptable exact answer for A: one

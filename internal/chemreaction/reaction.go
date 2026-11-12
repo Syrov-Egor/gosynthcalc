@@ -23,17 +23,37 @@
 //
 // # Coefficient algorithms
 //
-// The default [StrategyExact] uses exact rational arithmetic. A reaction whose
-// nullity is one is solved from the exact null-space direction (method
-// [MethodInverse]); a reaction with nullity two or more is solved by the exact
-// rational Phase-I simplex (method [MethodExactLP]). Both paths return
-// primitive positive integer coefficients. A reaction with no strictly
-// positive solution fails with an error wrapping [ErrNoPositiveSolution].
+// The default [StrategyExact] uses exact rational arithmetic and classifies
+// the signed reaction matrix A = [R | -P] by its nullity:
+//
+//   - nullity 0 means A x = 0 has only x = 0; the reaction is infeasible and
+//     the error wraps [ErrNoPositiveSolution];
+//   - nullity 1 gives a line span{v}; v is accepted only if it has no zero
+//     entries and all entries have the same sign, then scaled to primitive
+//     integers (method [MethodInverse]);
+//   - nullity 2 or more is solved by the exact rational Phase-I simplex
+//     (method [MethodExactLP]), which either finds a positive vector or
+//     proves infeasibility.
+//
+// Nullity alone is not an existence test: a nullity-1 direction can contain a
+// zero or mixed signs, and a higher-nullity space can still contain no
+// positive vector. Both cases return [ErrNoPositiveSolution].
 //
 // [StrategyLegacy] tries the historical Inv, GPinv and PPinv heuristics first
 // and then falls back to the exact method. It exists for compatibility and
 // comparison; its results can be larger and it is not needed for completeness.
-// Intify, Precision and Tolerance affect only legacy float results.
+// A failed heuristic returns [ErrMethodNotPositive]; it never claims that the
+// reaction is infeasible. Intify, Precision and Tolerance affect only legacy
+// float results.
+//
+// Exact coefficients are primitive positive integers and are never rounded or
+// intified. [ChemicalReaction.CoefficientsExact] returns them without passing
+// through float64, so values above 2^53 are preserved; the float API returns
+// an error wrapping [ErrCoefficientOverflow] instead of a corrupted value.
+// [ChemicalReaction.NormCoefficients] still divides by the target coefficient
+// and rounds to Precision for display. The simplex also returns
+// [ErrSimplexIterationLimit] on its safety limit and propagates context
+// cancellation unchanged.
 //
 // # Accepted input
 //
@@ -49,7 +69,9 @@ package chemreaction
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"math/big"
 	"slices"
 	"strconv"
 	"strings"
@@ -76,8 +98,9 @@ const (
 	// DefaultPrintPrecision is the default number of digits printed by
 	// [ChemicalReaction.Output].
 	DefaultPrintPrecision uint = 4
-	// DefaultTolerance is the default absolute tolerance for float
-	// comparisons, used when [ReacOptions.Tolerance] is not set.
+	// DefaultTolerance is the default float tolerance for legacy comparisons,
+	// used when [ReacOptions.Tolerance] is not set. Balance checks scale it by
+	// the coefficient magnitude.
 	DefaultTolerance float64 = 1e-8
 	// DefaultReactionSeparator is the canonical separator between reactants
 	// and products ("="). Every separator listed in reactionSymbols is
@@ -99,19 +122,20 @@ const (
 // the coefficients. Slices returned by the accessors are the cached values
 // themselves: callers must not modify them.
 type ChemicalReaction struct {
-	reaction       string
-	reacOpts       ReacOptions
-	decomposer     *reactionDecomposer
-	chemFormulas   *[]chemformula.ChemicalFormula
-	parsedFormulas *[][]chemformula.Atom
-	molarMasses    *[]float64
-	matrix         *mat.Dense
-	balancer       *balancer
-	coefs          *MethodResult
-	normCoefs      *[]float64
-	finalReac      *string
-	finalReacNorm  *string
-	masses         *[]float64
+	reaction            string
+	reacOpts            ReacOptions
+	decomposer          *reactionDecomposer
+	chemFormulas        *[]chemformula.ChemicalFormula
+	parsedFormulas      *[][]chemformula.Atom
+	exactParsedFormulas *[][]chemformula.ExactAtom
+	molarMasses         *[]float64
+	matrix              *mat.Dense
+	balancer            *balancer
+	coefs               *MethodResult
+	normCoefs           *[]float64
+	finalReac           *string
+	finalReacNorm       *string
+	masses              *[]float64
 }
 
 // Mode selects how the coefficients of a reaction are obtained.
@@ -158,18 +182,21 @@ type ReacOptions struct {
 	Target int
 	// TargetMass is the desired mass of the target compound in grams.
 	TargetMass float64
-	// Intify tells the balancer to convert fractional coefficients into the
-	// smallest integers with the same ratios; when it cannot be done safely
-	// the floats are kept. Coefficients are never intified in [Force] and
-	// [Check] modes, which use the numbers from the reaction string.
+	// Intify tells the legacy float path to convert fractional coefficients
+	// into the smallest integers with the same ratios; when it cannot be done
+	// safely the floats are kept. The exact path already returns primitive
+	// integers and ignores Intify. Coefficients are never intified in [Force]
+	// and [Check] modes, which use the numbers from the reaction string.
 	Intify bool
-	// Precision is the number of decimal places used when rounding every
-	// calculated value (molar masses, percentages, normalized coefficients,
-	// masses).
+	// Precision is the number of decimal places used when rounding calculated
+	// values (molar masses, percentages, normalized coefficients, masses) and
+	// when rounding legacy float coefficients. Exact coefficients are never
+	// rounded.
 	Precision uint
-	// Tolerance is the absolute tolerance used when comparing floats, i.e.
-	// when deciding whether a legacy candidate set of coefficients balances
-	// the reaction. It does not affect the exact path.
+	// Tolerance is the absolute float tolerance used for legacy candidate
+	// validation and [Check] mode; comparisons scale it by the coefficient
+	// magnitude. It does not affect the exact path or [ChemicalReaction.IsBalanced]
+	// for integer coefficients.
 	Tolerance float64
 	// Strategy selects how [Mode] Balance computes coefficients. The default
 	// zero value, [StrategyExact], uses the exact nullity-one solver and the
@@ -276,6 +303,26 @@ func (r *ChemicalReaction) ParsedFormulas() ([][]chemformula.Atom, error) {
 	return *r.parsedFormulas, nil
 }
 
+// ExactParsedFormulas returns the exact rational parsed form of every
+// compound, each in the order its elements first appear in the formula. It is
+// the exact counterpart of [ChemicalReaction.ParsedFormulas] and avoids
+// binary floating-point artifacts from nested fractional groups. The returned
+// slices are cached; callers must not modify them.
+func (r *ChemicalReaction) ExactParsedFormulas() ([][]chemformula.ExactAtom, error) {
+	if r.exactParsedFormulas == nil {
+		c, err := r.ChemFormulas()
+		if err != nil {
+			return nil, err
+		}
+		parsed := [][]chemformula.ExactAtom{}
+		for _, compound := range c {
+			parsed = append(parsed, compound.ExactParsedFormula())
+		}
+		r.exactParsedFormulas = &parsed
+	}
+	return *r.exactParsedFormulas, nil
+}
+
 // MolarMasses returns the [chemformula.ChemicalFormula.MolarMass] of every
 // compound in g/mol.
 func (r *ChemicalReaction) MolarMasses() ([]float64, error) {
@@ -322,8 +369,17 @@ func (r *ChemicalReaction) Balancer() (*balancer, error) {
 		return nil, err
 	}
 	if r.balancer == nil {
-		bal := newBalancer(
+		exactParsed, err := r.ExactParsedFormulas()
+		if err != nil {
+			return nil, err
+		}
+		exact, err := createExactReacMatrix(exactParsed, r.decomposer.separatorPos)
+		if err != nil {
+			return nil, err
+		}
+		bal := newBalancerWithExact(
 			mat,
+			exact,
 			r.decomposer.separatorPos,
 			r.reacOpts.Intify,
 			r.reacOpts.Precision,
@@ -365,8 +421,87 @@ func (r *ChemicalReaction) Coefficients() (*MethodResult, error) {
 	return r.coefs, nil
 }
 
+// ExactMethodResult is a primitive integer coefficient list together with the
+// name of the method that produced it. It is the full-precision counterpart of
+// [MethodResult] and is not limited by the exact float64 range.
+type ExactMethodResult struct {
+	// Method is the name of the algorithm or source that produced Result.
+	Method string
+	// Result holds one positive primitive integer per compound.
+	Result []*big.Int
+}
+
+// CoefficientsExact returns the coefficients as primitive positive integers
+// without passing through float64. For the default exact strategy it calls the
+// exact solver directly, so coefficients above 2^53 are preserved. For
+// user-supplied, Force, Check or legacy coefficients it converts the current
+// float values to their exact decimal rationals and scales them to primitive
+// integers; the ratios are preserved but the display scale may differ.
+//
+// An infeasible automatic balance returns an error wrapping
+// [ErrNoPositiveSolution].
+func (r *ChemicalReaction) CoefficientsExact() (*ExactMethodResult, error) {
+	useExactSolver := r.reacOpts.Rmode == Balance &&
+		r.reacOpts.Strategy == StrategyExact &&
+		(r.coefs == nil || r.coefs.Method != MethodUser)
+	if !useExactSolver {
+		coefs, err := r.Coefficients()
+		if err != nil {
+			return nil, err
+		}
+		return exactResultFromFloats(coefs)
+	}
+
+	bal, err := r.Balancer()
+	if err != nil {
+		return nil, err
+	}
+	a, err := bal.analysis()
+	if err != nil {
+		return nil, fmt.Errorf("analyze reaction matrix: %w", err)
+	}
+
+	switch {
+	case a.nullity == 0:
+		return nil, fmt.Errorf("can't balance reaction: %w", ErrNoPositiveSolution)
+	case a.nullity == 1:
+		z, err := bal.solveNullityOneExact(a)
+		if err != nil {
+			return nil, fmt.Errorf("inverse: %w", err)
+		}
+		return &ExactMethodResult{Method: MethodInverse, Result: z}, nil
+	default:
+		z, err := bal.solveSimplexExact(context.Background(), a)
+		if err != nil {
+			return nil, fmt.Errorf("exact LP: %w", err)
+		}
+		return &ExactMethodResult{Method: MethodExactLP, Result: z}, nil
+	}
+}
+
+// exactResultFromFloats converts a float method result into primitive integer
+// ratios.
+func exactResultFromFloats(coefs *MethodResult) (*ExactMethodResult, error) {
+	if coefs == nil {
+		return nil, fmt.Errorf("%w: nil coefficient result", ErrInvalidMatrix)
+	}
+	x := make([]*big.Rat, len(coefs.Result))
+	for i, f := range coefs.Result {
+		r, err := ratFromFloat(f)
+		if err != nil {
+			return nil, fmt.Errorf("coefficient %d: %w", i, err)
+		}
+		x[i] = r
+	}
+	z, err := primitiveIntegers(x)
+	if err != nil {
+		return nil, err
+	}
+	return &ExactMethodResult{Method: coefs.Method, Result: z}, nil
+}
+
 // SetCoefficients replaces the coefficients with a user-supplied list. The
-// stored [MethodResult] then carries the method name "User". The list must
+// stored [MethodResult] then carries the method name [MethodUser]. The list must
 // have one entry per compound and every entry must be positive. Setting new
 // coefficients invalidates the cached normalized coefficients, final reaction
 // strings and masses, which are then recomputed from them.
@@ -414,10 +549,12 @@ func (r *ChemicalReaction) NormCoefficients() ([]float64, error) {
 	return *r.normCoefs, nil
 }
 
-// IsBalanced reports whether the current coefficients balance the reaction
-// within [ReacOptions.Tolerance].
-// Missing coefficients, a wrong number of coefficients or any other failure
-// on the way makes it return false rather than an error.
+// IsBalanced reports whether the current coefficients balance the reaction.
+// Integer coefficients are verified exactly against the rational reaction
+// matrix; fractional coefficients are checked with a float tolerance scaled
+// by the coefficient magnitude. Missing coefficients, a wrong number of
+// coefficients or any other failure on the way makes it return false rather
+// than an error.
 func (r *ChemicalReaction) IsBalanced() bool {
 	coefs, err := r.Coefficients()
 	if err != nil || coefs == nil {
@@ -440,11 +577,20 @@ func (r *ChemicalReaction) IsBalanced() bool {
 		return false
 	}
 
+	// Integer coefficients can be checked exactly. This is stronger than a
+	// scaled float tolerance and is not fooled by a large configured
+	// tolerance. Fractional user coefficients fall back to float validation.
+	if A, _, analysisErr := bal.exactMatrixAndAnalysis(); analysisErr == nil {
+		if z, ok := exactIntegerCoefficients(coefs.Result); ok {
+			return validExactResult(A, z)
+		}
+	}
+
 	return isReactionBalanced(
 		reactantMatrix,
 		productMatrix,
 		coefs.Result,
-		r.reacOpts.Tolerance,
+		scaledTolerance(coefs.Result, r.reacOpts.Tolerance),
 	)
 }
 

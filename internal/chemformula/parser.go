@@ -3,6 +3,7 @@ package chemformula
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +21,67 @@ type Atom struct {
 // String formats the atom as a dict-like entry, e.g. 'Fe': 2.
 func (a Atom) String() string {
 	return fmt.Sprintf("'%s': %v", a.Label, a.Amount)
+}
+
+// ExactAtom is a single entry of an exactly parsed chemical formula. Amount is
+// an exact rational number of atoms, so nested fractional groups such as
+// (Ga0.9Sc0.1)3 do not acquire binary floating-point artifacts.
+type ExactAtom struct {
+	Label  string
+	Amount *big.Rat
+}
+
+// String formats the exact atom as a dict-like entry, e.g. 'Fe': 2.
+func (a ExactAtom) String() string {
+	return fmt.Sprintf("'%s': %s", a.Label, a.Amount.RatString())
+}
+
+// formulaCount carries the float and exact values of an atom count in
+// parallel. The float value preserves the existing [Atom] API and behaviour;
+// the rational value is used by the exact reaction balancer.
+type formulaCount struct {
+	float float64
+	exact *big.Rat
+}
+
+// exactNumber parses a formula multiplier as an exact rational number.
+func exactNumber(s string) (*big.Rat, error) {
+	if strings.HasPrefix(s, ".") {
+		s = "0" + s
+	}
+	r, ok := new(big.Rat).SetString(s)
+	if !ok {
+		return nil, fmt.Errorf("invalid number %q", s)
+	}
+	return r, nil
+}
+
+func formulaCountFrom(f float64, exact *big.Rat) formulaCount {
+	if exact == nil {
+		exact = new(big.Rat)
+	}
+	return formulaCount{float: f, exact: new(big.Rat).Set(exact)}
+}
+
+// add returns c + other in both representations.
+func (c formulaCount) add(other formulaCount) formulaCount {
+	exact := new(big.Rat)
+	if c.exact != nil {
+		exact.Add(exact, c.exact)
+	}
+	if other.exact != nil {
+		exact.Add(exact, other.exact)
+	}
+	return formulaCount{float: c.float + other.float, exact: exact}
+}
+
+// mul returns c * other in both representations.
+func (c formulaCount) mul(other formulaCount) formulaCount {
+	exact := new(big.Rat)
+	if c.exact != nil && other.exact != nil {
+		exact.Mul(c.exact, other.exact)
+	}
+	return formulaCount{float: c.float * other.float, exact: exact}
 }
 
 // TokenType identifies the kind of lexical token produced by a [Lexer].
@@ -169,15 +231,24 @@ func (p *Parser) advance() {
 // appearance, or an error describing the first problem it encountered. It
 // backs the validation performed by [NewChemicalFormula].
 func (p *Parser) parse() ([]Atom, error) {
+	atoms, _, err := p.parseWithExact()
+	return atoms, err
+}
+
+// parseWithExact parses the whole formula and returns both the float atoms used
+// by the existing [Atom] API and the exact rational atoms used by the exact
+// reaction balancer. The two representations are built in one pass so they
+// cannot diverge.
+func (p *Parser) parseWithExact() ([]Atom, []ExactAtom, error) {
 	if p.current.Type == TokenEOF {
-		return nil, fmt.Errorf("empty formula string")
+		return nil, nil, fmt.Errorf("empty formula string")
 	}
 	p.seen = make(map[string]bool)
 	p.elementOrder = nil
 
 	atomCounts, err := p.parseSequence(false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if p.current.Type == TokenAdduct {
@@ -185,29 +256,39 @@ func (p *Parser) parse() ([]Atom, error) {
 		p.advance()
 		multiplier, err := p.parseMultiplier()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		subCounts, err := p.parseSequence(false)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := p.mergeCounts(atomCounts, subCounts, multiplier, adduct); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if p.current.Type == TokenAdduct {
-		return nil, p.errorAt(p.current, "there are more than 1 adduct symbol *•·")
+		return nil, nil, p.errorAt(p.current, "there are more than 1 adduct symbol *•·")
 	}
 	if p.current.Type != TokenEOF {
-		return nil, p.unexpectedToken()
+		return nil, nil, p.unexpectedToken()
 	}
 
 	result := make([]Atom, 0, len(p.elementOrder))
+	exactResult := make([]ExactAtom, 0, len(p.elementOrder))
 	for _, label := range p.elementOrder {
-		result = append(result, Atom{Label: label, Amount: atomCounts[label]})
+		count := atomCounts[label]
+		result = append(result, Atom{Label: label, Amount: count.float})
+		exact := count.exact
+		if exact == nil {
+			exact = new(big.Rat)
+		}
+		exactResult = append(exactResult, ExactAtom{
+			Label:  label,
+			Amount: new(big.Rat).Set(exact),
+		})
 	}
-	return result, nil
+	return result, exactResult, nil
 }
 
 // parseSequence parses atoms, parenthesized groups and their multipliers
@@ -215,8 +296,8 @@ func (p *Parser) parse() ([]Atom, error) {
 // end of input is reached, and returns the atom counts it accumulated. Each
 // element symbol is recorded in p.elementOrder on first sight so that the
 // final [Atom] slice preserves the order of the formula.
-func (p *Parser) parseSequence(inGroup bool) (map[string]float64, error) {
-	atomCounts := make(map[string]float64)
+func (p *Parser) parseSequence(inGroup bool) (map[string]formulaCount, error) {
+	atomCounts := make(map[string]formulaCount)
 	terms := 0
 	for {
 		token := p.current
@@ -283,33 +364,37 @@ func (p *Parser) parseSequence(inGroup bool) (map[string]float64, error) {
 }
 
 // parseMultiplier consumes the numeric token that follows an atom, a group or
-// an adduct symbol and returns its value, defaulting to 1 when no number is
-// present. Numbers with several decimal points, a trailing point or a
-// non-finite value are rejected.
-func (p *Parser) parseMultiplier() (float64, error) {
+// an adduct symbol and returns its float and exact values, defaulting to 1
+// when no number is present. Numbers with several decimal points, a trailing
+// point or a non-finite float value are rejected.
+func (p *Parser) parseMultiplier() (formulaCount, error) {
 	if p.current.Type != TokenNumber {
-		return 1, nil
+		return formulaCountFrom(1, big.NewRat(1, 1)), nil
 	}
 	token := p.current
 	if strings.Count(token.Value, ".") > 1 || strings.HasSuffix(token.Value, ".") {
-		return 0, p.errorAt(token, "invalid number %q", token.Value)
+		return formulaCount{}, p.errorAt(token, "invalid number %q", token.Value)
 	}
 	count, err := strconv.ParseFloat(token.Value, 64)
 	if err != nil {
-		return 0, fmt.Errorf("%v: %w", p.errorAt(token, "invalid number %q", token.Value), err)
+		return formulaCount{}, fmt.Errorf("%v: %w", p.errorAt(token, "invalid number %q", token.Value), err)
 	}
 	if math.IsNaN(count) || math.IsInf(count, 0) {
-		return 0, p.errorAt(token, "non-finite number %q", token.Value)
+		return formulaCount{}, p.errorAt(token, "non-finite number %q", token.Value)
+	}
+	exact, err := exactNumber(token.Value)
+	if err != nil {
+		return formulaCount{}, fmt.Errorf("%v: %w", p.errorAt(token, "invalid number %q", token.Value), err)
 	}
 	p.advance()
-	return count, nil
+	return formulaCountFrom(count, exact), nil
 }
 
 // addCount adds amount to the count of the element label, rejecting totals
-// that would become NaN or infinite.
-func (p *Parser) addCount(counts map[string]float64, label string, amount float64, token Token) error {
-	count := counts[label] + amount
-	if math.IsNaN(count) || math.IsInf(count, 0) {
+// that would become NaN or infinite in the float representation.
+func (p *Parser) addCount(counts map[string]formulaCount, label string, amount formulaCount, token Token) error {
+	count := counts[label].add(amount)
+	if math.IsNaN(count.float) || math.IsInf(count.float, 0) {
 		return p.errorAt(token, "non-finite atom amount for %q", label)
 	}
 	counts[label] = count
@@ -318,9 +403,13 @@ func (p *Parser) addCount(counts map[string]float64, label string, amount float6
 
 // mergeCounts folds the atom counts of a parsed group or adduct part into
 // counts, scaling them by multiplier; token is used for error reporting.
-func (p *Parser) mergeCounts(counts, subCounts map[string]float64, multiplier float64, token Token) error {
+func (p *Parser) mergeCounts(counts, subCounts map[string]formulaCount, multiplier formulaCount, token Token) error {
 	for label, count := range subCounts {
-		if err := p.addCount(counts, label, count*multiplier, token); err != nil {
+		scaled := count.mul(multiplier)
+		if math.IsNaN(scaled.float) || math.IsInf(scaled.float, 0) {
+			return p.errorAt(token, "non-finite atom amount for %q", label)
+		}
+		if err := p.addCount(counts, label, scaled, token); err != nil {
 			return err
 		}
 	}

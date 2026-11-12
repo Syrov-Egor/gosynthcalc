@@ -205,6 +205,29 @@ func nullSpaceBasis(rref [][]*big.Rat, pivots []int, n int) [][]*big.Rat {
 	return basis
 }
 
+// exactDenseRank returns the exact rank of a float matrix, treating all
+// entries as positive (no product-column negation). It is used by the legacy
+// pseudoinverse heuristics to choose their SVD truncation rank from exact
+// arithmetic instead of an absolute tolerance.
+func exactDenseRank(m *mat.Dense) (int, error) {
+	if m == nil {
+		return 0, fmt.Errorf("%w: nil matrix", ErrInvalidMatrix)
+	}
+	_, cols := m.Dims()
+	if cols <= 0 {
+		return 0, fmt.Errorf("%w: matrix has %d columns", ErrInvalidMatrix, cols)
+	}
+	A, err := newExactMatrix(m, cols)
+	if err != nil {
+		return 0, err
+	}
+	a, err := analyze(A)
+	if err != nil {
+		return 0, err
+	}
+	return a.rank, nil
+}
+
 // analyze validates A, computes its exact RREF, rank, nullity and null-space
 // basis, and returns them together. The null-space basis is nil when the
 // nullity is zero; otherwise it has A.cols rows and A.nullity columns and
