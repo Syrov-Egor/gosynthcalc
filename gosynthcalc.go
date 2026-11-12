@@ -90,14 +90,16 @@ type ChemicalReaction = chemreaction.ChemicalReaction
 //					Intify:     true,
 //					Precision:  8,
 //					Tolerance:  1e-8,
+//					Strategy:   StrategyExact,
 //				}
 //
 //	- Rmode: Coefficients calculation mode [ReactionMode]
 //	- Target: Index of target compound (0 by default, or first compound in the products), can be negative (limited by reactant)
 //	- Target_mass: Desired mass of target compound (in grams)
-//	- Intify: Is it required to convert the coefficients to integer values?
+//	- Intify: Is it required to convert legacy float coefficients to integer values?
 //	- Precision: Value of rounding precision (8 by default)
-//	- Tolerance: Tolerance for comparing floats (1e-8 by default)
+//	- Tolerance: Tolerance for comparing legacy float coefficients (1e-8 by default)
+//	- Strategy: Exact (default) or legacy coefficient routing
 type ReactionOptions = chemreaction.ReacOptions
 
 //  1. The "force" mode is used when a user enters coefficients
@@ -118,6 +120,27 @@ const (
 )
 
 type MethodResult = chemreaction.MethodResult
+
+// BalanceStrategy selects how automatic coefficients are calculated.
+type BalanceStrategy = chemreaction.BalanceStrategy
+
+const (
+	// StrategyExact uses exact nullity-one solving and the exact rational
+	// Phase-I simplex. It is sound and complete.
+	StrategyExact BalanceStrategy = chemreaction.StrategyExact
+	// StrategyLegacy tries the historical heuristics before the exact method.
+	StrategyLegacy BalanceStrategy = chemreaction.StrategyLegacy
+)
+
+// Method names reported by [MethodResult].
+const (
+	MethodUser    = chemreaction.MethodUser
+	MethodInverse = chemreaction.MethodInverse
+	MethodExactLP = chemreaction.MethodExactLP
+	MethodGPInv   = chemreaction.MethodGPInv
+	MethodPPInv   = chemreaction.MethodPPInv
+	MethodComb    = chemreaction.MethodComb
+)
 
 // Builder function to create [ChemicalFormula] object.
 func NewChemicalFormula(formula string, precision ...uint) (*ChemicalFormula, error) {

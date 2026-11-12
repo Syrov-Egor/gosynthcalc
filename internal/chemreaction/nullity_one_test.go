@@ -162,7 +162,7 @@ func TestInvSquareRankNMinusOne(t *testing.T) {
 		{2, 2},
 		{1, 1},
 	})
-	bal := newBalancer(m, 1, true, 8, 1e-8)
+	bal := newBalancer(m, 1, true, 8, StrategyExact, 1e-8)
 	got, err := bal.Inv()
 	if err != nil {
 		t.Fatalf("Inv() error: %v", err)
@@ -181,7 +181,7 @@ func TestInvRejectsNullityZero(t *testing.T) {
 		{2, 2},
 		{1, 2},
 	})
-	bal := newBalancer(m, 1, true, 8, 1e-8)
+	bal := newBalancer(m, 1, true, 8, StrategyExact, 1e-8)
 	_, err := bal.Inv()
 	if !errors.Is(err, ErrNoPositiveSolution) {
 		t.Errorf("Inv() error = %v, want ErrNoPositiveSolution", err)

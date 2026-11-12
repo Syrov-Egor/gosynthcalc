@@ -28,7 +28,7 @@ type coeffs struct {
 //
 // Any other mode fails with "no such mode".
 func (c *coeffs) calculateCoeffs() (MethodResult, error) {
-	user := "User"
+	user := MethodUser
 	switch c.mode {
 
 	case Force:
@@ -109,7 +109,7 @@ func (c *coeffs) elementCountValidation() []string {
 // calculation and list validation — and returns the coefficients together
 // with the name of the method that produced them.
 func (c *coeffs) getCoeffs() (MethodResult, error) {
-	user := "User"
+	user := MethodUser
 	nilStr := MethodResult{Method: user, Result: nil}
 
 	diff := c.elementCountValidation()

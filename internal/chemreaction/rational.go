@@ -99,6 +99,20 @@ func exactBalances(A *exactMatrix, z []*big.Int) bool {
 	return true
 }
 
+// validExactResult reports whether z is an acceptable exact answer for A: one
+// strictly positive integer per compound and A z = 0 exactly.
+func validExactResult(A *exactMatrix, z []*big.Int) bool {
+	if A == nil || len(z) != A.cols {
+		return false
+	}
+	for _, v := range z {
+		if v == nil || v.Sign() <= 0 {
+			return false
+		}
+	}
+	return exactBalances(A, z)
+}
+
 // primitiveIntegers clears the denominators of a strictly positive rational
 // vector and divides the resulting integers by their greatest common divisor.
 // The result is the unique primitive positive integer vector on the same ray.

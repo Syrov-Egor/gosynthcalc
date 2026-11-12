@@ -2,7 +2,6 @@ package chemreaction
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sync"
 
@@ -11,10 +10,11 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-// balancer computes reaction coefficients with the matrix algorithms of
-// [balancingAlgos] and post-processes their results: it rounds them, checks
-// that they really balance the reaction and, when intify is set, converts
-// them to the smallest integer equivalents. It is created by [ChemicalReaction.Balancer].
+// balancer computes reaction coefficients. The exact path uses the cached
+// rational analysis of the reaction matrix; the legacy path runs the float
+// heuristics in [balancingAlgos] and post-processes their results (rounding,
+// float validation and optional intification). It is created by
+// [ChemicalReaction.Balancer].
 type balancer struct {
 	reactionMatrix *mat.Dense
 	separatorPos   int
@@ -23,6 +23,7 @@ type balancer struct {
 	precision      uint
 	bAlgos         *balancingAlgos
 	maxDenom       int
+	strategy       BalanceStrategy
 
 	exact        *exactMatrix
 	analysisOnce sync.Once
@@ -31,10 +32,10 @@ type balancer struct {
 }
 
 // MethodResult is a coefficient list together with the name of the method
-// that produced it. Method is "User" when the coefficients come from the
-// reaction string or from [ChemicalReaction.SetCoefficients], and
-// "inverse", "general pseudoinverse" or "partial pseudoinverse" when
-// they come from [balancer.Auto].
+// that produced it. Method is [MethodUser] when the coefficients come from the
+// reaction string or from [ChemicalReaction.SetCoefficients]. [balancer.Auto]
+// reports [MethodInverse] for nullity 1 and [MethodExactLP] for higher
+// nullity; the legacy heuristics report [MethodGPInv] and [MethodPPInv].
 type MethodResult struct {
 	// Method is the name of the algorithm or source that produced Result.
 	Method string
@@ -44,11 +45,12 @@ type MethodResult struct {
 
 // newBalancer returns a balancer for the given reaction matrix, whose first
 // separatorPos columns are reactants and the rest products. Precision is the
-// rounding precision of the coefficients; tolerance defaults to 1e-8 when
-// omitted. intify selects whether integer coefficients are preferred, and
-// maxDenom (the maximum coefficient and fraction denominator, see
-// [balancer.intifyCoefs]) is fixed at 1_000_000.
-func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uint, tolerance ...float64) *balancer {
+// rounding precision of legacy float results; tolerance defaults to 1e-8 when
+// omitted. intify selects whether legacy results are intified,
+// strategy selects exact or legacy routing, and maxDenom (the maximum
+// coefficient and fraction denominator, see [balancer.intifyCoefs]) is fixed
+// at 1_000_000.
+func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uint, strategy BalanceStrategy, tolerance ...float64) *balancer {
 	var tol float64
 	if tolerance == nil {
 		tol = 1e-8
@@ -66,6 +68,7 @@ func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 		precision:      precision,
 		bAlgos:         bAlgos,
 		maxDenom:       1_000_000,
+		strategy:       strategy,
 	}
 }
 
@@ -107,8 +110,8 @@ func (b *balancer) analysis() (matrixAnalysis, error) {
 // LCM overflow or exceed 1e15, flips sign along the way or ends up negative
 // or oversized, the input coefficients are returned unchanged so that
 // callers keep working with correct floats rather than wrong integers. The
-// result is validated again by [balancer.calculateByMethod] before it is
-// accepted.
+// result is validated again by [balancer.calculateLegacyByMethod] before it
+// is accepted.
 func (b *balancer) intifyCoefs(coefs []float64, limit int) []float64 {
 	initialCoefficients := make([]float64, len(coefs))
 	copy(initialCoefficients, coefs)
@@ -189,93 +192,29 @@ func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coe
 	return floats.EqualApprox(reacSum, prodSum, atol)
 }
 
-// calculateByMethod runs one of the named algorithms — "inv", "gpinv",
-// "ppinv" or "comb" (only "comb" reads maxCoef, the largest coefficient the
-// search may try) — and post-processes its result.
-//
-// "inv" is the exact nullity-one path: its primitive integer coefficients are
-// already validated exactly, so they are returned without rounding or
-// intification. The remaining legacy methods produce floats: their results
-// are rounded to precision+2 decimals and must pass [balancer.validResult],
-// meaning their count, positivity and balance are all verified within
-// tolerance. If intify is enabled, [balancer.intifyCoefs] is attempted on top
-// and is only kept when it still passes the same validation.
-//
-// Any failure is reported as an error ("can't balance reaction by %s
-// method", "wrong coefficients" or "no method %s"). ctx is used to cancel
-// a running "comb" search.
-func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef ...uint) ([]float64, error) {
-	var coefficients []float64
-	var err error
-	exactResult := false
-	errm := fmt.Errorf("can't balance reaction by %s method", method)
-
-	switch method {
-	case "inv":
-		var analysis matrixAnalysis
-		analysis, err = b.analysis()
-		if err == nil {
-			coefficients, err = b.solveNullityOne(analysis)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errm, err)
-		}
-		exactResult = true
-	case "gpinv":
-		coefficients, err = b.bAlgos.gPInvAlgorithm()
-		if err != nil {
-			return nil, errm
-		}
-	case "ppinv":
-		coefficients, err = b.bAlgos.pPInvAlgorithm()
-		if err != nil {
-			return nil, errm
-		}
-	case "comb":
-		coefficients = b.bAlgos.combinatorial(ctx, maxCoef[0])
-		if coefficients == nil {
-			return nil, errm
-		}
-	default:
-		return nil, fmt.Errorf("no method %s", method)
-	}
-
-	if exactResult {
-		_, matrLength := b.reactionMatrix.Dims()
-		if len(coefficients) != matrLength {
-			return nil, fmt.Errorf("wrong coefficients")
-		}
-		return coefficients, nil
-	}
-
-	coefficients = utils.RoundFloatS(coefficients, b.precision+2)
+// validFloatResult reports whether coefs is an acceptable legacy answer: one
+// finite positive coefficient per compound and a weighted reactant/product
+// balance within a tolerance scaled by the coefficient magnitude. Scaling
+// avoids false failures for large but legitimate coefficients such as
+// 1000001.
+func (b *balancer) validFloatResult(coefs []float64) bool {
 	_, matrLength := b.reactionMatrix.Dims()
-
-	if !b.validResult(coefficients, matrLength) {
-		return nil, fmt.Errorf("wrong coefficients")
+	if len(coefs) != matrLength || !allPositive(coefs) {
+		return false
 	}
-
-	if b.intify {
-		intified := b.intifyCoefs(coefficients, b.maxDenom)
-		if b.validResult(intified, matrLength) {
-			coefficients = intified
+	scale := 1.0
+	for _, coef := range coefs {
+		if math.IsNaN(coef) || math.IsInf(coef, 0) {
+			return false
 		}
+		scale += math.Abs(coef)
 	}
-	return coefficients, nil
-}
-
-// validResult reports whether coefs is an acceptable answer: it must contain
-// one coefficient per compound, every coefficient must be positive, and the
-// reaction must be balanced within tolerance.
-func (b *balancer) validResult(coefs []float64, matrLength int) bool {
-	return len(coefs) == matrLength &&
-		allPositive(coefs) &&
-		isReactionBalanced(
-			b.bAlgos.ReactantMatrix,
-			b.bAlgos.ProductMatrix,
-			coefs,
-			b.tolerance,
-		)
+	return isReactionBalanced(
+		b.bAlgos.ReactantMatrix,
+		b.bAlgos.ProductMatrix,
+		coefs,
+		b.tolerance*scale,
+	)
 }
 
 // Inv computes the coefficients from the exact null space of the signed
@@ -289,31 +228,23 @@ func (b *balancer) validResult(coefs []float64, matrLength int) bool {
 // not a coefficient vector, and a positive linear combination must be found
 // by the universal solver.
 func (b *balancer) Inv() ([]float64, error) {
-	res, err := b.calculateByMethod(context.Background(), "inv")
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return b.calculateExactByMethod(context.Background(), MethodInverse)
 }
 
 // GPinv computes the coefficients with the general pseudoinverse algorithm
-// of [balancingAlgos.gPInvAlgorithm] (Risteski's method).
+// of [balancingAlgos.gPInvAlgorithm] (Risteski's method). It is a legacy
+// heuristic: its result is validated as a float and may be much larger than a
+// primitive integer solution.
 func (b *balancer) GPinv() ([]float64, error) {
-	res, err := b.calculateByMethod(context.Background(), "gpinv")
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return b.calculateLegacyByMethod(context.Background(), MethodGPInv)
 }
 
 // PPinv computes the coefficients with the partial pseudoinverse algorithm
-// of [balancingAlgos.pPInvAlgorithm] (Risteski's method).
+// of [balancingAlgos.pPInvAlgorithm] (Risteski's method). It is a legacy
+// heuristic: its result is validated as a float and may be much larger than a
+// primitive integer solution.
 func (b *balancer) PPinv() ([]float64, error) {
-	res, err := b.calculateByMethod(context.Background(), "ppinv")
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return b.calculateLegacyByMethod(context.Background(), MethodPPInv)
 }
 
 // Comb computes the coefficients by brute force with
@@ -323,38 +254,7 @@ func (b *balancer) PPinv() ([]float64, error) {
 //
 // Unlike the matrix methods, this one is not attempted by [balancer.Auto].
 func (b *balancer) Comb(ctx context.Context, maxCoef uint) ([]float64, error) {
-	res, err := b.calculateByMethod(ctx, "comb", maxCoef)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-// Auto tries to balance the reaction by calling [balancer.Inv],
-// [balancer.GPinv] and [balancer.PPinv] in turn and returns the first
-// success together with its human-readable algorithm name ("inverse",
-// "general pseudoinverse" or "partial pseudoinverse"). If none of them can
-// balance the reaction it reports "can't balance this reaction by any
-// method".
-func (b *balancer) Auto() (MethodResult, error) {
-	var coefs []float64
-	var err error
-
-	coefs, err = b.Inv()
-	if err == nil {
-		return MethodResult{Method: "inverse", Result: coefs}, nil
-	}
-	coefs, err = b.GPinv()
-	if err == nil {
-		return MethodResult{Method: "general pseudoinverse", Result: coefs}, nil
-	}
-	coefs, err = b.PPinv()
-	if err == nil {
-		return MethodResult{Method: "partial pseudoinverse", Result: coefs}, nil
-	}
-
-	return MethodResult{Method: "", Result: nil},
-		fmt.Errorf("can't balance this reaction by any method")
+	return b.calculateLegacyByMethod(ctx, MethodComb, maxCoef)
 }
 
 // mulAndSumFl computes result = matrix · vector in place for a floating

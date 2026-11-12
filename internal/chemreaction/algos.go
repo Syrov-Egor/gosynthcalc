@@ -103,7 +103,8 @@ func newBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 // by atoms appearance in the reaction string.
 //
 // The returned vector still contains the raw (possibly negative) values;
-// rounding, intification and validation happen in [balancer.calculateByMethod].
+// rounding, intification and validation happen in
+// [balancer.calculateLegacyByMethod].
 func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 	rows, cols := b.ReactionMatrix.Dims()
 

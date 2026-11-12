@@ -77,7 +77,7 @@ func (b *balancer) solveNullityOneExact(a matrixAnalysis) ([]*big.Int, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !exactBalances(A, z) {
+	if !validExactResult(A, z) {
 		return nil, fmt.Errorf("nullity-one solution failed exact validation: %w", ErrInvalidMatrix)
 	}
 	return z, nil

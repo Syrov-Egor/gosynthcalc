@@ -4,7 +4,7 @@
 // string such as "KIO3+KI+H2SO4=I2+K2SO4+H2O" is decomposed into reactants
 // and products, assembled into a reaction matrix (rows are elements, columns
 // are compounds) and then balanced, either by checking or reusing the
-// coefficients written in the string or by one of the matrix algorithms
+// coefficients written in the string or by the exact or legacy algorithms
 // exposed through [balancer]. From the coefficients the package derives the
 // normalized coefficients, the final reaction strings and, finally, the
 // masses of every compound for a chosen target and target mass.
@@ -20,6 +20,20 @@
 //     coefficients balance the reaction.
 //
 //  3. Balance (the default) calculates the coefficients automatically.
+//
+// # Coefficient algorithms
+//
+// The default [StrategyExact] uses exact rational arithmetic. A reaction whose
+// nullity is one is solved from the exact null-space direction (method
+// [MethodInverse]); a reaction with nullity two or more is solved by the exact
+// rational Phase-I simplex (method [MethodExactLP]). Both paths return
+// primitive positive integer coefficients. A reaction with no strictly
+// positive solution fails with an error wrapping [ErrNoPositiveSolution].
+//
+// [StrategyLegacy] tries the historical Inv, GPinv and PPinv heuristics first
+// and then falls back to the exact method. It exists for compatibility and
+// comparison; its results can be larger and it is not needed for completeness.
+// Intify, Precision and Tolerance affect only legacy float results.
 //
 // # Accepted input
 //
@@ -113,8 +127,10 @@ const (
 	// otherwise the calculation fails with "reaction is not balanced".
 	Check
 	// Balance tries to calculate the coefficients from the reaction string
-	// automatically with the matrix algorithms of [balancer.Auto]. It is the
-	// default mode.
+	// automatically with [balancer.Auto]: exact nullity-one solving or the
+	// exact rational Phase-I simplex by default, or the historical heuristics
+	// first when [ReacOptions.Strategy] is [StrategyLegacy]. It is the default
+	// mode.
 	Balance
 )
 
@@ -152,9 +168,14 @@ type ReacOptions struct {
 	// masses).
 	Precision uint
 	// Tolerance is the absolute tolerance used when comparing floats, i.e.
-	// when deciding whether a candidate set of coefficients balances the
-	// reaction.
+	// when deciding whether a legacy candidate set of coefficients balances
+	// the reaction. It does not affect the exact path.
 	Tolerance float64
+	// Strategy selects how [Mode] Balance computes coefficients. The default
+	// zero value, [StrategyExact], uses the exact nullity-one solver and the
+	// exact rational Phase-I simplex. [StrategyLegacy] tries the historical
+	// heuristics first and falls back to the exact method.
+	Strategy BalanceStrategy
 }
 
 // NewChemicalReaction validates and decomposes reaction and returns a
@@ -187,6 +208,7 @@ func NewChemicalReaction(reaction string, options ...ReacOptions) (*ChemicalReac
 			Intify:     DefaultIntify,
 			Precision:  DefaultPrecision,
 			Tolerance:  DefaultTolerance,
+			Strategy:   StrategyExact,
 		}
 	} else {
 		reacOpt = options[0]
@@ -289,10 +311,11 @@ func (r *ChemicalReaction) Matrix() (*mat.Dense, error) {
 
 // Balancer returns the balancer of this reaction: the object that exposes
 // the individual balancing algorithms ([balancer.Inv], [balancer.GPinv],
-// [balancer.PPinv], [balancer.Comb]) and [balancer.Auto]. It is configured
-// with the reaction matrix, the position of the separator, Intify, Precision
-// and Tolerance from [ReacOptions]. Note that the balancer works in every mode:
-// coefficients computed through it can be assigned with [ChemicalReaction.SetCoefficients].
+// [balancer.PPinv], [balancer.Comb]), the exact universal solver and
+// [balancer.Auto]. It is configured with the reaction matrix, the position of
+// the separator, Intify, Precision, Strategy and Tolerance from [ReacOptions].
+// Note that the balancer works in every mode: coefficients computed through it
+// can be assigned with [ChemicalReaction.SetCoefficients].
 func (r *ChemicalReaction) Balancer() (*balancer, error) {
 	mat, err := r.Matrix()
 	if err != nil {
@@ -304,6 +327,7 @@ func (r *ChemicalReaction) Balancer() (*balancer, error) {
 			r.decomposer.separatorPos,
 			r.reacOpts.Intify,
 			r.reacOpts.Precision,
+			r.reacOpts.Strategy,
 			r.reacOpts.Tolerance)
 		r.balancer = bal
 	}
@@ -356,7 +380,7 @@ func (r *ChemicalReaction) SetCoefficients(coefs []float64) error {
 		}
 	}
 
-	r.coefs = &MethodResult{Method: "User", Result: slices.Clone(coefs)}
+	r.coefs = &MethodResult{Method: MethodUser, Result: slices.Clone(coefs)}
 	r.normCoefs = nil
 	r.finalReac = nil
 	r.finalReacNorm = nil
