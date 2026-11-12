@@ -3,9 +3,7 @@ package chemreaction
 import (
 	"context"
 	"fmt"
-	"math"
 	"runtime"
-	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -13,9 +11,10 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-// balancingAlgos implements the four algorithms used to balance a chemical
-// reaction. The reaction matrix is split at SeparatorPos into the reactant and product
-// halves that every algorithm works with.
+// balancingAlgos implements the legacy matrix heuristics used to balance a
+// chemical reaction. The reaction matrix is split at SeparatorPos into the
+// reactant and product halves that every algorithm works with. The exact
+// nullity-one solver lives in nullity.go and does not use these heuristics.
 //
 // Fields:
 //
@@ -77,142 +76,6 @@ func newBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 		ProductCols:    productCols,
 		Tolerance:      tol,
 	}
-}
-
-// invAlgorithm computes the coefficients with the reaction matrix inverse
-// algorithm proposed by [Thorne](https://arxiv.org/abs/1110.4321). The
-// calculation is based on the nullity, or dimensionality, of the matrix.
-//
-// The algorithm can be described in steps:
-//
-//  1. If the number of rows is greater than the number of columns, add zero
-//     columns until the matrix becomes square (Note: this is a modification
-//     of the original Thorne method described in the article).
-//
-//  2. If the reaction matrix is square (which means that the number of atoms
-//     involved is equal to the number of compounds) then turn the matrix
-//     into its row-echelon form by singular value decomposition.
-//
-//  3. Calculate the nullity of the matrix, which is basically the number of
-//     compounds minus the rank of the matrix.
-//
-//  4. Create a matrix augmented by a nullity number of rows of a flipped
-//     identity matrix. If any rows are zeros, replace them with identity
-//     matrix rows.
-//
-//  5. Invert the augmented matrix.
-//
-//  6. Extract the column of the inverse that corresponds to the last
-//     original column (the rightmost one, before the zero columns added in
-//     step 1) and transpose it.
-//
-//  7. Normalize this value with the absolute min value of the vector.
-//
-//  8. Round up float operations errors (done by
-//     [balancer.calculateByMethod] once the algorithm returns).
-//
-// The absolute values of this vector are the coefficients of the reaction.
-//
-// Note: while this method works great for reactions with 0 and 1 nullity, it
-// generally cannot work with nullities 2 and higher. Thorne claims that for
-// higher nullities a nullity number of vectors should be extracted, and each
-// of them contains a set of correct coefficients. However, if the number of
-// rows in the flipped augmentation identity matrix is 2 or more, one can
-// easily see that each vector will contain nullity-1 zeroes, therefore they
-// cannot be a correct vector of coefficients.
-//
-// Go implementation counts the singular values above Tolerance. It returns
-// an error when the factorization or the inversion of
-// the augmented matrix fails.
-func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
-	rows, cols := b.ReactionMatrix.Dims()
-	reactionMatrix := mat.DenseCopyOf(b.ReactionMatrix)
-	var zerosAdded int
-
-	if rows > cols {
-		zerosAdded = rows - cols
-		newMatrix := mat.NewDense(rows, rows, nil)
-		newMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
-		reactionMatrix = newMatrix
-		cols = rows
-	}
-
-	if rows == cols {
-		var svd mat.SVD
-		ok := svd.Factorize(reactionMatrix, mat.SVDFull)
-		if !ok {
-			return nil, fmt.Errorf("SVD factorization failed")
-		}
-		var v mat.Dense
-		svd.VTo(&v)
-		reactionMatrix = mat.DenseCopyOf(v.T())
-	}
-
-	rank, _, err := matrixRank(reactionMatrix, b.Tolerance)
-	if err != nil {
-		return nil, err
-	}
-	nullity := cols - rank
-
-	var augumentedMatrix *mat.Dense
-
-	if nullity > 0 {
-		augument := mat.NewDense(nullity, cols, nil)
-		for i := range nullity {
-			augument.Set(i, cols-i-1, 1.0)
-		}
-		augumentedMatrix = mat.NewDense(rows+nullity, cols, nil)
-		augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
-		augumentedMatrix.Slice(rows, rows+nullity, 0, cols).(*mat.Dense).Copy(augument)
-	} else {
-		augumentedMatrix = mat.NewDense(rows, cols, nil)
-		augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
-	}
-
-	nonZeroRows := findNonZeroRows(augumentedMatrix, b.Tolerance)
-	if len(nonZeroRows) < rows+nullity {
-		cleanMatrix := mat.NewDense(len(nonZeroRows), cols, nil)
-		for i, rowIdx := range nonZeroRows {
-			row := mat.Row(nil, rowIdx, augumentedMatrix)
-			cleanMatrix.SetRow(i, row)
-		}
-		augumentedMatrix = cleanMatrix
-	}
-
-	aRows, aCols := augumentedMatrix.Dims()
-
-	if aRows != aCols {
-		return nil, fmt.Errorf("singular matrix")
-	}
-
-	var inversedMatrix mat.Dense
-
-	err = inversedMatrix.Inverse(augumentedMatrix)
-	if err != nil {
-		return nil, fmt.Errorf("%s", "Matrix inversion failed: "+err.Error())
-	}
-
-	r, c := inversedMatrix.Dims()
-	vector := make([]float64, r)
-	for i := range r {
-		vector[i] = inversedMatrix.At(i, c-zerosAdded-1)
-	}
-
-	var nonZeroVector []float64
-	for _, val := range vector {
-		absVal := math.Abs(val)
-		if absVal > b.Tolerance {
-			nonZeroVector = append(nonZeroVector, absVal)
-		}
-	}
-
-	minVal := slices.Min(nonZeroVector)
-	coefs := make([]float64, len(nonZeroVector))
-	for i, val := range nonZeroVector {
-		coefs[i] = val / minVal
-	}
-
-	return coefs, nil
 }
 
 // gPInvAlgorithm computes the coefficients with the matrix general
@@ -550,27 +413,4 @@ func matrixRank(m *mat.Dense, tol float64) (int, mat.SVD, error) {
 	}
 
 	return rank, svd, nil
-}
-
-// findNonZeroRows returns the indices of the rows of m that contain at least
-// one element with an absolute value greater than tol. It drops the all-zero
-// rows the [balancingAlgos.invAlgorithm] augmentation may produce.
-func findNonZeroRows(m *mat.Dense, tol float64) []int {
-	rows, cols := m.Dims()
-	nonZeroRows := []int{}
-
-	for i := range rows {
-		isZeroRow := true
-		for j := range cols {
-			if math.Abs(m.At(i, j)) > tol {
-				isZeroRow = false
-				break
-			}
-		}
-		if !isZeroRow {
-			nonZeroRows = append(nonZeroRows, i)
-		}
-	}
-
-	return nonZeroRows
 }

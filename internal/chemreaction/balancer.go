@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 
 	"github.com/Syrov-Egor/gosynthcalc/internal/utils"
 	"gonum.org/v1/gonum/floats"
@@ -22,6 +23,11 @@ type balancer struct {
 	precision      uint
 	bAlgos         *balancingAlgos
 	maxDenom       int
+
+	exact        *exactMatrix
+	analysisOnce sync.Once
+	analysisRes  matrixAnalysis
+	analysisErr  error
 }
 
 // MethodResult is a coefficient list together with the name of the method
@@ -61,6 +67,33 @@ func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 		bAlgos:         bAlgos,
 		maxDenom:       1_000_000,
 	}
+}
+
+// exactMatrixAndAnalysis returns the signed exact matrix and its cached exact
+// analysis. The float reaction matrix is converted once per balancer and the
+// RREF, rank, nullity and null-space basis are computed once as well.
+func (b *balancer) exactMatrixAndAnalysis() (*exactMatrix, matrixAnalysis, error) {
+	b.analysisOnce.Do(func() {
+		exact, err := newExactMatrix(b.reactionMatrix, b.separatorPos)
+		if err != nil {
+			b.analysisErr = err
+			return
+		}
+		analysis, err := analyze(exact)
+		if err != nil {
+			b.analysisErr = err
+			return
+		}
+		b.exact = exact
+		b.analysisRes = analysis
+	})
+	return b.exact, b.analysisRes, b.analysisErr
+}
+
+// analysis returns the cached exact matrix analysis of the reaction.
+func (b *balancer) analysis() (matrixAnalysis, error) {
+	_, analysis, err := b.exactMatrixAndAnalysis()
+	return analysis, err
 }
 
 // intifyCoefs converts fractional coefficients into the smallest whole
@@ -158,8 +191,12 @@ func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coe
 
 // calculateByMethod runs one of the named algorithms — "inv", "gpinv",
 // "ppinv" or "comb" (only "comb" reads maxCoef, the largest coefficient the
-// search may try) — and post-processes its result: the coefficients are
-// rounded to precision+2 decimals and must pass [balancer.validResult],
+// search may try) — and post-processes its result.
+//
+// "inv" is the exact nullity-one path: its primitive integer coefficients are
+// already validated exactly, so they are returned without rounding or
+// intification. The remaining legacy methods produce floats: their results
+// are rounded to precision+2 decimals and must pass [balancer.validResult],
 // meaning their count, positivity and balance are all verified within
 // tolerance. If intify is enabled, [balancer.intifyCoefs] is attempted on top
 // and is only kept when it still passes the same validation.
@@ -170,14 +207,20 @@ func isReactionBalanced(reactantMatrix *mat.Dense, productMatrix *mat.Dense, coe
 func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef ...uint) ([]float64, error) {
 	var coefficients []float64
 	var err error
+	exactResult := false
 	errm := fmt.Errorf("can't balance reaction by %s method", method)
 
 	switch method {
 	case "inv":
-		coefficients, err = b.bAlgos.invAlgorithm()
-		if err != nil {
-			return nil, errm
+		var analysis matrixAnalysis
+		analysis, err = b.analysis()
+		if err == nil {
+			coefficients, err = b.solveNullityOne(analysis)
 		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errm, err)
+		}
+		exactResult = true
 	case "gpinv":
 		coefficients, err = b.bAlgos.gPInvAlgorithm()
 		if err != nil {
@@ -196,6 +239,15 @@ func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef
 	default:
 		return nil, fmt.Errorf("no method %s", method)
 	}
+
+	if exactResult {
+		_, matrLength := b.reactionMatrix.Dims()
+		if len(coefficients) != matrLength {
+			return nil, fmt.Errorf("wrong coefficients")
+		}
+		return coefficients, nil
+	}
+
 	coefficients = utils.RoundFloatS(coefficients, b.precision+2)
 	_, matrLength := b.reactionMatrix.Dims()
 
@@ -226,8 +278,16 @@ func (b *balancer) validResult(coefs []float64, matrLength int) bool {
 		)
 }
 
-// Inv computes the coefficients with the matrix inverse algorithm of
-// [balancingAlgos.invAlgorithm] (Thorne's method).
+// Inv computes the coefficients from the exact null space of the signed
+// reaction matrix. It is sound and complete when the nullity is 1: the unique
+// null direction is checked for zero and mixed-sign entries, normalised to a
+// positive primitive integer vector and verified exactly.
+//
+// Nullity 0, or a null direction with a zero or mixed-sign entry, returns an
+// error wrapping [ErrNoPositiveSolution]. Nullity 2 or more returns an error
+// wrapping [ErrNullityNotOne]: for higher nullity a null-space basis vector is
+// not a coefficient vector, and a positive linear combination must be found
+// by the universal solver.
 func (b *balancer) Inv() ([]float64, error) {
 	res, err := b.calculateByMethod(context.Background(), "inv")
 	if err != nil {
