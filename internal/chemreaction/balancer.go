@@ -63,6 +63,29 @@ func newBalancer(matrix *mat.Dense, separatorPos int, intify bool, precision uin
 	}
 }
 
+// reactionRankAndNullity returns the rank and the nullity (number of columns
+// minus rank) of the reaction matrix. The algorithms in [balancingAlgos]
+// receive these values from the balancer instead of calculating them again.
+func (b *balancer) reactionRankAndNullity() (rank, nullity int, err error) {
+	rank, _, err = matrixRank(b.reactionMatrix, b.tolerance)
+	if err != nil {
+		return 0, 0, fmt.Errorf("error computing rank of the reaction matrix: %w", err)
+	}
+	_, cols := b.reactionMatrix.Dims()
+	return rank, cols - rank, nil
+}
+
+// reactantRank returns the rank of the reactant half of the reaction matrix.
+// It is needed by [balancingAlgos.pPInvAlgorithm] together with the rank of
+// the whole matrix.
+func (b *balancer) reactantRank() (int, error) {
+	rank, _, err := matrixRank(b.bAlgos.ReactantMatrix, b.tolerance)
+	if err != nil {
+		return 0, fmt.Errorf("error computing rank of the reactant matrix: %w", err)
+	}
+	return rank, nil
+}
+
 // intifyCoefs converts fractional coefficients into the smallest whole
 // numbers representing the same ratios: every coefficient is turned into a
 // fraction whose denominator is bounded by maxDenom, the denominators are
@@ -174,17 +197,33 @@ func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef
 
 	switch method {
 	case "inv":
-		coefficients, err = b.bAlgos.invAlgorithm()
+		rank, nullity, rankErr := b.reactionRankAndNullity()
+		if rankErr != nil {
+			return nil, errm
+		}
+		coefficients, err = b.bAlgos.invAlgorithm(rank, nullity)
 		if err != nil {
 			return nil, errm
 		}
 	case "gpinv":
-		coefficients, err = b.bAlgos.gPInvAlgorithm()
+		rank, nullity, rankErr := b.reactionRankAndNullity()
+		if rankErr != nil {
+			return nil, errm
+		}
+		coefficients, err = b.bAlgos.gPInvAlgorithm(rank, nullity)
 		if err != nil {
 			return nil, errm
 		}
 	case "ppinv":
-		coefficients, err = b.bAlgos.pPInvAlgorithm()
+		rank, nullity, rankErr := b.reactionRankAndNullity()
+		if rankErr != nil {
+			return nil, errm
+		}
+		reactantRank, rankErr := b.reactantRank()
+		if rankErr != nil {
+			return nil, errm
+		}
+		coefficients, err = b.bAlgos.pPInvAlgorithm(rank, nullity, reactantRank)
 		if err != nil {
 			return nil, errm
 		}
@@ -196,6 +235,14 @@ func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef
 	default:
 		return nil, fmt.Errorf("no method %s", method)
 	}
+
+	return b.finalizeCoefficients(coefficients)
+}
+
+// finalizeCoefficients rounds a raw algorithm result, validates it and, when
+// intify is enabled, replaces it with the smallest integer coefficients that
+// still pass the same validation.
+func (b *balancer) finalizeCoefficients(coefficients []float64) ([]float64, error) {
 	coefficients = utils.RoundFloatS(coefficients, b.precision+2)
 	_, matrLength := b.reactionMatrix.Dims()
 
@@ -217,7 +264,7 @@ func (b *balancer) calculateByMethod(ctx context.Context, method string, maxCoef
 // reaction must be balanced within tolerance.
 func (b *balancer) validResult(coefs []float64, matrLength int) bool {
 	return len(coefs) == matrLength &&
-		allPositive(coefs) &&
+		utils.AllPositive(coefs) &&
 		isReactionBalanced(
 			b.bAlgos.ReactantMatrix,
 			b.bAlgos.ProductMatrix,
@@ -270,31 +317,91 @@ func (b *balancer) Comb(ctx context.Context, maxCoef uint) ([]float64, error) {
 	return res, nil
 }
 
-// Auto tries to balance the reaction by calling [balancer.Inv],
-// [balancer.GPinv] and [balancer.PPinv] in turn and returns the first
-// success together with its human-readable algorithm name ("inverse",
-// "general pseudoinverse" or "partial pseudoinverse"). If none of them can
-// balance the reaction it reports "can't balance this reaction by any
-// method".
+// Auto chooses a balancing algorithm from the rank and nullity of the
+// reaction matrix:
+//
+//   - nullity 0: no balanced equation exists, so an error is returned;
+//   - nullity 1: the unique (up to scale) solution is computed with
+//     [balancingAlgos.invAlgorithm] ("inverse");
+//   - nullity > 1: [balancingAlgos.gPInvAlgorithm] ("general pseudoinverse")
+//     and [balancingAlgos.pPInvAlgorithm] ("partial pseudoinverse") are both
+//     tried, and the valid result with the lowest sum of raw coefficients is
+//     returned. The sums are compared before intification; the chosen
+//     coefficients then go through the usual rounding, validation and
+//     intification.
+//
+// If no algorithm produces valid coefficients it reports "can't balance this
+// reaction by any method".
 func (b *balancer) Auto() (MethodResult, error) {
-	var coefs []float64
-	var err error
-
-	coefs, err = b.Inv()
-	if err == nil {
-		return MethodResult{Method: "inverse", Result: coefs}, nil
-	}
-	coefs, err = b.GPinv()
-	if err == nil {
-		return MethodResult{Method: "general pseudoinverse", Result: coefs}, nil
-	}
-	coefs, err = b.PPinv()
-	if err == nil {
-		return MethodResult{Method: "partial pseudoinverse", Result: coefs}, nil
+	rank, nullity, err := b.reactionRankAndNullity()
+	if err != nil {
+		return MethodResult{Method: "", Result: nil},
+			fmt.Errorf("can't balance this reaction by any method: %w", err)
 	}
 
-	return MethodResult{Method: "", Result: nil},
-		fmt.Errorf("can't balance this reaction by any method")
+	if nullity == 0 {
+		return MethodResult{Method: "", Result: nil},
+			fmt.Errorf("the reaction cannot be balanced (nullity 0)")
+	}
+
+	if nullity == 1 {
+		coefficients, err := b.bAlgos.invAlgorithm(rank, nullity)
+		if err != nil {
+			return MethodResult{Method: "", Result: nil},
+				fmt.Errorf("can't balance this reaction by any method: %w", err)
+		}
+		coefficients, err = b.finalizeCoefficients(coefficients)
+		if err != nil {
+			return MethodResult{Method: "", Result: nil},
+				fmt.Errorf("can't balance this reaction by any method: %w", err)
+		}
+		return MethodResult{Method: "inverse", Result: coefficients}, nil
+	}
+
+	reactantRank, err := b.reactantRank()
+	if err != nil {
+		return MethodResult{Method: "", Result: nil},
+			fmt.Errorf("can't balance this reaction by any method: %w", err)
+	}
+
+	type candidate struct {
+		method string
+		coefs  []float64
+		sum    float64
+	}
+	candidates := make([]candidate, 0, 2)
+
+	if raw, err := b.bAlgos.gPInvAlgorithm(rank, nullity); err == nil {
+		if coefs, err := b.finalizeCoefficients(raw); err == nil {
+			candidates = append(candidates, candidate{
+				method: "general pseudoinverse",
+				coefs:  coefs,
+				sum:    utils.SumAbs(raw),
+			})
+		}
+	}
+	if raw, err := b.bAlgos.pPInvAlgorithm(rank, nullity, reactantRank); err == nil {
+		if coefs, err := b.finalizeCoefficients(raw); err == nil {
+			candidates = append(candidates, candidate{
+				method: "partial pseudoinverse",
+				coefs:  coefs,
+				sum:    utils.SumAbs(raw),
+			})
+		}
+	}
+
+	if len(candidates) == 0 {
+		return MethodResult{Method: "", Result: nil},
+			fmt.Errorf("can't balance this reaction by any method")
+	}
+
+	best := candidates[0]
+	for _, cand := range candidates[1:] {
+		if cand.sum < best.sum {
+			best = cand
+		}
+	}
+	return MethodResult{Method: best.method, Result: best.coefs}, nil
 }
 
 // mulAndSumFl computes result = matrix · vector in place for a floating
@@ -306,14 +413,4 @@ func mulAndSumFl(matrix *mat.Dense, vector []float64, result []float64, rows int
 			result[row] += matrix.At(row, col) * vector[col]
 		}
 	}
-}
-
-// allPositive reports whether every coefficient is strictly greater than 0.
-func allPositive(coefs []float64) bool {
-	for _, coef := range coefs {
-		if coef <= 0 {
-			return false
-		}
-	}
-	return true
 }

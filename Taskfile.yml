@@ -18,7 +18,7 @@ tasks:
     desc: "Run all unit tests"
     cmds:
       - go test ./...
-  
+
   bench-formula:
     desc: "Run chemformula benchmark"
     cmds:
@@ -48,7 +48,7 @@ tasks:
           cat "$output" >&2
           exit "$status"
         fi
-  
+
   bench:
     desc: "Run all benchmarks"
     cmds:
@@ -56,7 +56,7 @@ tasks:
       - task: bench-formula
       - echo "Reaction:"
       - task: bench-reaction
-  
+
   ensure-prof-dir:
     internal: true
     desc: "Ensure that profile directory exist"
@@ -74,13 +74,13 @@ tasks:
     deps: [ensure-prof-dir]
     cmds:
       - go test -bench=BenchmarkChemicalFormula_output -run='^$' -benchtime=2s -cpuprofile={{.PROF_DIR}}/cpu_formula.pprof -memprofile={{.PROF_DIR}}/mem_formula.pprof -o {{.PROF_DIR}}/formula.test > /dev/null
-  
+
   prof-reaction:
     desc: "Run pprof profiler on chemreaction benchmark"
     deps: [ensure-prof-dir]
     cmds:
       - go test -bench=BenchmarkChemicalReaction_output -run='^$' -benchtime=2s -cpuprofile={{.PROF_DIR}}/cpu_reaction.pprof -memprofile={{.PROF_DIR}}/mem_reaction.pprof -o {{.PROF_DIR}}/reaction.test > /dev/null
-  
+
   prof:
     desc: "Run all profiles"
     deps: [ensure-prof-dir, clean-prof]
@@ -88,9 +88,19 @@ tasks:
       - task: prof-formula
       - task: prof-reaction
       - echo "Profiling done. Results are in /{{.PROF_DIR}}"
-  
+
   watch-prof:
     desc: "Open a CLI interface to watch pprof results. OBJECT is 'reaction' or 'formula'. TYPE is 'cpu' or 'mem'. AGRS are any additional arguments (like '-alloc_objects')"
     deps: [ensure-prof-dir]
     cmds:
       - go tool pprof {{.ARGS}} {{.PROF_DIR}}/{{.OBJECT}}.test {{.PROF_DIR}}/{{.TYPE}}_{{.OBJECT}}.pprof
+
+  lint:
+    desc: "Run Go linter on the codebase"
+    cmds:
+      - golangci-lint run -E gocritic
+
+  loc:
+    desc: "Run cloc program to display current lines of code. cloc should be in PATH"
+    cmds:
+      - cloc .
