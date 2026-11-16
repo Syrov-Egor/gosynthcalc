@@ -79,168 +79,362 @@ func newBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 	}
 }
 
-// invAlgorithm computes the coefficients with the reaction matrix inverse
-// algorithm proposed by [Thorne](https://arxiv.org/abs/1110.4321). The
-// calculation is based on the nullity, or dimensionality, of the matrix.
+// nullSpaceByInversion computes a basis of the null space of the reaction
+// matrix using Thorne's matrix-inversion trick
+// (https://arxiv.org/abs/1110.4321).
 //
-// The algorithm can be described in steps:
+// Let A be the m×n composition matrix and r its rank. The idea is to pick r
+// linearly independent rows R of A (r×n), to append n-r unit rows e_f (one
+// per "free" column f) so that the stacked matrix
 //
-//  1. If the number of rows is greater than the number of columns, add zero
-//     columns until the matrix becomes square (Note: this is a modification
-//     of the original Thorne method described in the article).
+//	M = [ R ]
+//	    [ E ]
 //
-//  2. If the reaction matrix is square (which means that the number of atoms
-//     involved is equal to the number of compounds) then turn the matrix
-//     into its row-echelon form by singular value decomposition.
+// is square and invertible, and to read the null space off the last n-r
+// columns of M⁻¹. Indeed M·M⁻¹ = I, so for the k-th of those columns x_k:
+// R·x_k = 0 (hence A·x_k = 0, the other rows of A being combinations of the
+// rows of R) and e_{f_j}·x_k = δ_jk.
 //
-//  3. Calculate the nullity of the matrix, which is basically the number of
-//     compounds minus the rank of the matrix.
+// Steps:
 //
-//  4. Create a matrix augmented by a nullity number of rows of a flipped
-//     identity matrix. If any rows are zeros, replace them with identity
-//     matrix rows.
+//  1. The rank r is the number of singular values above the tolerance.
+//  2. A Gaussian elimination with partial pivoting, left to right, tracks
+//     which ORIGINAL rows end up as pivot rows (they are independent, which
+//     drops dependent rows such as a charge row that is a combination of the
+//     element rows) and which columns carry a pivot. The columns without a
+//     pivot are the free columns. For a generic matrix these are the
+//     rightmost columns, exactly as in the article, but unlike a fixed
+//     "identity in the last columns" the choice always yields an invertible M.
+//  3. M is built from the original rows and the unit rows, inverted, and its
+//     last n-r columns are returned (an n×(n-r) matrix; column k is the k-th
+//     basis vector, indexed by compound).
 //
-//  5. Invert the augmented matrix.
+// The original rows, and not an orthonormal basis of the row space, are used
+// on purpose: M then stays as exact as the input. For H + O₂ = H₁₀₀₀₀₀₁O₂ the
+// matrix [[1 0 N] [0 2 2]] has a condition number of about N/2, so an SVD
+// basis (the first r rows of Vᵀ) loses about log₁₀(cond) digits and the
+// coefficient N comes out as 1000001.0003, while with the integer rows the
+// augmented matrix is [[1 0 N] [0 2 2] [0 0 1]] and its inverse is exact.
 //
-//  6. Extract the column of the inverse that corresponds to the last
-//     original column (the rightmost one, before the zero columns added in
-//     step 1) and transpose it.
+// Safeguards: every returned basis vector is verified (scaled residual of
+// A·x). If the exact-rows route fails or is inaccurate, which can only happen
+// for badly conditioned matrices that no chemical equation produces, the same
+// construction is repeated with the orthonormal SVD basis, which is
+// backward-stable but not exact. If that fails the check as well, an error is
+// returned: a wrong null space is never returned silently.
 //
-//  7. Normalize this value with the absolute min value of the vector.
-//
-//  8. Round up float operations errors (done by
-//     [balancer.calculateByMethod] once the algorithm returns).
-//
-// The absolute values of this vector are the coefficients of the reaction.
-//
-// Note: while this method works great for reactions with 0 and 1 nullity, it
-// generally cannot work with nullities 2 and higher. Thorne claims that for
-// higher nullities a nullity number of vectors should be extracted, and each
-// of them contains a set of correct coefficients. However, if the number of
-// rows in the flipped augmentation identity matrix is 2 or more, one can
-// easily see that each vector will contain nullity-1 zeroes, therefore they
-// cannot be a correct vector of coefficients.
-//
-// Go implementation counts the singular values above Tolerance. It returns
-// an error when the factorization or the inversion of
-// the augmented matrix fails.
-func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
-	rows, cols := b.ReactionMatrix.Dims()
-	reactionMatrix := mat.DenseCopyOf(b.ReactionMatrix)
-	var zerosAdded int
-
-	if rows > cols {
-		zerosAdded = rows - cols
-		newMatrix := mat.NewDense(rows, rows, nil)
-		newMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
-		reactionMatrix = newMatrix
-		cols = rows
+// The returned nullity is n-r. The basis is nil when the nullity is zero.
+func (b *balancingAlgos) nullSpaceByInversion() (basis *mat.Dense, nullity int, err error) {
+	m, n := b.ReactionMatrix.Dims()
+	if n == 0 || m == 0 {
+		return nil, 0, fmt.Errorf("empty reaction matrix")
 	}
 
-	if rows == cols {
-		var svd mat.SVD
-		ok := svd.Factorize(reactionMatrix, mat.SVDFull)
-		if !ok {
-			return nil, fmt.Errorf("SVD factorization failed")
+	var svd mat.SVD
+	if !svd.Factorize(b.ReactionMatrix, mat.SVDThin) {
+		return nil, 0, fmt.Errorf("SVD factorization failed")
+	}
+	sv := svd.Values(nil)
+	rank := 0
+	for _, s := range sv {
+		if s > b.Tolerance*math.Max(1, sv[0]) {
+			rank++
 		}
-		var v mat.Dense
-		svd.VTo(&v)
-		reactionMatrix = mat.DenseCopyOf(v.T())
 	}
 
-	rank, _, err := matrixRank(reactionMatrix, b.Tolerance)
+	nullity = n - rank
+	if nullity == 0 {
+		return nil, 0, nil
+	}
+	if rank == 0 {
+		// The zero matrix: every unit vector is a null vector.
+		basis = mat.NewDense(n, n, nil)
+		for i := range n {
+			basis.Set(i, i, 1)
+		}
+		return basis, n, nil
+	}
+
+	// 1. Exact route: independent ORIGINAL rows.
+	var exactErr error
+	pivotRows, free, exactErr := pivotRowsAndFreeColumns(b.ReactionMatrix, rank, b.Tolerance)
+	if exactErr == nil && len(free) == nullity {
+		rows := mat.NewDense(rank, n, nil)
+		for i, r := range pivotRows {
+			for j := range n {
+				rows.Set(i, j, b.ReactionMatrix.At(r, j))
+			}
+		}
+		basis, exactErr = augmentedInverseBasis(rows, free)
+		if exactErr == nil && !b.nullBasisIsAccurate(basis) {
+			exactErr = fmt.Errorf("inaccurate null space")
+		}
+		if exactErr == nil {
+			return basis, nullity, nil
+		}
+	} else if exactErr == nil {
+		exactErr = fmt.Errorf("rank/pivot mismatch: expected %d free columns, found %d", nullity, len(free))
+	}
+
+	// 2. Fallback: orthonormal basis of the row space (first rank rows of Vᵀ).
+	var v mat.Dense
+	svd.VTo(&v)
+	rowSpace := mat.NewDense(rank, n, nil)
+	for i := range rank {
+		for j := range n {
+			rowSpace.Set(i, j, v.At(j, i))
+		}
+	}
+	_, free, err = pivotRowsAndFreeColumns(rowSpace, rank, b.Tolerance)
+	if err == nil && len(free) == nullity {
+		basis, err = augmentedInverseBasis(rowSpace, free)
+		if err == nil && b.nullBasisIsAccurate(basis) {
+			return basis, nullity, nil
+		}
+	}
+
+	return nil, 0, fmt.Errorf("could not compute an accurate null space (the reaction matrix is numerically ill-conditioned): %w", exactErr)
+}
+
+// augmentedInverseBasis stacks rows (rank×n) on top of the unit rows of the
+// free columns, inverts the resulting n×n matrix and returns its last
+// n-rank columns, which form a basis of the null space of rows.
+func augmentedInverseBasis(rows *mat.Dense, free []int) (*mat.Dense, error) {
+	rank, n := rows.Dims()
+
+	mm := mat.NewDense(n, n, nil)
+	mm.Slice(0, rank, 0, n).(*mat.Dense).Copy(rows)
+	for k, f := range free {
+		mm.Set(rank+k, f, 1)
+	}
+
+	var inv mat.Dense
+	if err := inv.Inverse(mm); err != nil {
+		return nil, fmt.Errorf("matrix inversion failed: %w", err)
+	}
+
+	nullity := n - rank
+	basis := mat.NewDense(n, nullity, nil)
+	for k := range nullity {
+		for i := range n {
+			basis.Set(i, k, inv.At(i, rank+k))
+		}
+	}
+	return basis, nil
+}
+
+// nullBasisIsAccurate checks that every column x of basis satisfies A·x ≈ 0.
+// For each row i the residual |Σ a_ij·x_j| must be tiny compared to the terms
+// that were added up (Σ |a_ij·x_j|, a component-wise test), or, to tolerate
+// the rounding noise that sits in entries that are really zero, tiny compared
+// to the size of the row times the size of x (a norm-wise test).
+func (b *balancingAlgos) nullBasisIsAccurate(basis *mat.Dense) bool {
+	m, n := b.ReactionMatrix.Dims()
+	_, k := basis.Dims()
+	for c := range k {
+		xMax := 0.0
+		for j := range n {
+			xMax = math.Max(xMax, math.Abs(basis.At(j, c)))
+		}
+		for i := range m {
+			var sum, scale, rowAbs float64
+			for j := range n {
+				t := b.ReactionMatrix.At(i, j) * basis.At(j, c)
+				sum += t
+				scale += math.Abs(t)
+				rowAbs += math.Abs(b.ReactionMatrix.At(i, j))
+			}
+			if math.Abs(sum) > 1e-10*scale+1e-13*rowAbs*xMax {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// pivotRowsAndFreeColumns runs a left-to-right Gaussian elimination with
+// partial pivoting on a copy of a and returns
+//
+//   - the indices (ascending) of the ORIGINAL rows of a that were used as
+//     pivot rows: they are linearly independent and span the row space;
+//   - the indices of the columns without a pivot (the free columns).
+//
+// The stacked matrix [those rows; unit rows of the free columns] is
+// invertible: the pivot rows are, up to a unit lower-triangular transform,
+// the echelon rows, whose pivot-column minor is triangular and nonsingular.
+// It returns an error if the number of pivots differs from rank.
+func pivotRowsAndFreeColumns(a *mat.Dense, rank int, tol float64) (pivotRows, free []int, err error) {
+	m, n := a.Dims()
+	w := mat.DenseCopyOf(a)
+
+	maxAbs := 0.0
+	for i := range m {
+		for j := range n {
+			maxAbs = math.Max(maxAbs, math.Abs(w.At(i, j)))
+		}
+	}
+	eps := tol * math.Max(1, maxAbs)
+
+	orig := make([]int, m) // orig[i] = original index of the row now at i
+	for i := range orig {
+		orig[i] = i
+	}
+	isPivot := make([]bool, n)
+
+	row := 0
+	for col := 0; col < n && row < m; col++ {
+		best, bestVal := -1, eps
+		for i := row; i < m; i++ {
+			if v := math.Abs(w.At(i, col)); v > bestVal {
+				best, bestVal = i, v
+			}
+		}
+		if best < 0 {
+			continue
+		}
+		if best != row {
+			for j := range n {
+				t := w.At(row, j)
+				w.Set(row, j, w.At(best, j))
+				w.Set(best, j, t)
+			}
+			orig[row], orig[best] = orig[best], orig[row]
+		}
+		piv := w.At(row, col)
+		for i := row + 1; i < m; i++ {
+			f := w.At(i, col) / piv
+			if f == 0 {
+				continue
+			}
+			for j := col; j < n; j++ {
+				w.Set(i, j, w.At(i, j)-f*w.At(row, j))
+			}
+		}
+		isPivot[col] = true
+		row++
+	}
+	if row != rank {
+		return nil, nil, fmt.Errorf("could not find %d pivot rows (found %d)", rank, row)
+	}
+
+	pivotRows = slices.Clone(orig[:row])
+	slices.Sort(pivotRows)
+	for j, p := range isPivot {
+		if !p {
+			free = append(free, j)
+		}
+	}
+	return pivotRows, free, nil
+}
+
+// invAlgorithm computes the coefficients with the reaction-matrix
+// inverse algorithm proposed by Thorne.
+//
+// It is a thin layer over [balancingAlgos.nullSpaceByInversion]:
+//
+//   - nullity 0: no balanced equation exists → error;
+//   - nullity ≥ 2: there are infinitely many independent balanced equations,
+//     so there is no single answer → error (the basis is still available
+//     from nullSpaceByInversion);
+//   - nullity 1: the null vector is unique up to scale. It is oriented so
+//     that the reactants are positive, validated (every compound must take
+//     part, and reactants and products must have opposite signs), and then
+//     divided by its smallest magnitude. Rounding to integers is left to the
+//     caller, as before.
+//
+// The reaction matrix is assumed to hold plain (non-negative) atom counts for
+// both sides, as in the article, so a balanced vector has opposite signs on
+// the two sides.
+func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
+	_, cols := b.ReactionMatrix.Dims()
+	if b.SeparatorPos <= 0 || b.SeparatorPos >= cols {
+		return nil, fmt.Errorf("reaction needs at least one reactant and one product")
+	}
+
+	basis, nullity, err := b.nullSpaceByInversion()
 	if err != nil {
 		return nil, err
 	}
-	nullity := cols - rank
-
-	var augumentedMatrix *mat.Dense
-
-	if nullity > 0 {
-		augument := mat.NewDense(nullity, cols, nil)
-		for i := range nullity {
-			augument.Set(i, cols-i-1, 1.0)
-		}
-		augumentedMatrix = mat.NewDense(rows+nullity, cols, nil)
-		augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
-		augumentedMatrix.Slice(rows, rows+nullity, 0, cols).(*mat.Dense).Copy(augument)
-	} else {
-		augumentedMatrix = mat.NewDense(rows, cols, nil)
-		augumentedMatrix.Slice(0, rows, 0, cols).(*mat.Dense).Copy(reactionMatrix)
+	switch {
+	case nullity == 0:
+		return nil, fmt.Errorf("the reaction cannot be balanced (nullity 0)")
+	case nullity > 1:
+		return nil, fmt.Errorf("the reaction has nullity %d: it has infinitely many independent balanced equations, not a single one", nullity)
 	}
 
-	nonZeroRows := findNonZeroRows(augumentedMatrix, b.Tolerance)
-	if len(nonZeroRows) < rows+nullity {
-		cleanMatrix := mat.NewDense(len(nonZeroRows), cols, nil)
-		for i, rowIdx := range nonZeroRows {
-			row := mat.Row(nil, rowIdx, augumentedMatrix)
-			cleanMatrix.SetRow(i, row)
-		}
-		augumentedMatrix = cleanMatrix
+	x := mat.Col(nil, 0, basis)
+
+	maxAbs := 0.0
+	for _, val := range x {
+		maxAbs = math.Max(maxAbs, math.Abs(val))
 	}
+	eps := b.Tolerance * maxAbs
 
-	aRows, aCols := augumentedMatrix.Dims()
-
-	if aRows != aCols {
-		return nil, fmt.Errorf("singular matrix")
-	}
-
-	var inversedMatrix mat.Dense
-
-	err = inversedMatrix.Inverse(augumentedMatrix)
-	if err != nil {
-		return nil, fmt.Errorf("%s", "Matrix inversion failed: "+err.Error())
-	}
-
-	r, c := inversedMatrix.Dims()
-	vector := make([]float64, r)
-	for i := range r {
-		vector[i] = inversedMatrix.At(i, c-zerosAdded-1)
-	}
-
-	var nonZeroVector []float64
-	for _, val := range vector {
-		absVal := math.Abs(val)
-		if absVal > b.Tolerance {
-			nonZeroVector = append(nonZeroVector, absVal)
+	// Orient the vector so that reactants come out positive.
+	if x[0] < 0 {
+		for i := range x {
+			x[i] = -x[i]
 		}
 	}
 
-	minVal := slices.Min(nonZeroVector)
-	coefs := make([]float64, len(nonZeroVector))
-	for i, val := range nonZeroVector {
-		coefs[i] = val / minVal
+	for i, val := range x {
+		switch {
+		case math.Abs(val) <= eps:
+			return nil, fmt.Errorf("compound #%d does not take part in the only balanced equation", i)
+		case i < b.SeparatorPos && val < 0:
+			return nil, fmt.Errorf("compound #%d (reactant) has the wrong sign: it belongs on the product side", i)
+		case i >= b.SeparatorPos && val > 0:
+			return nil, fmt.Errorf("compound #%d (product) has the wrong sign: it belongs on the reactant side", i)
+		}
 	}
 
+	coefs := make([]float64, len(x))
+	for i, val := range x {
+		coefs[i] = math.Abs(val)
+	}
+	minVal := slices.Min(coefs)
+	for i := range coefs {
+		coefs[i] /= minVal
+	}
 	return coefs, nil
 }
 
-// gPInvAlgorithm computes the coefficients with the matrix general
-// pseudoinverse algorithm proposed by
+// gPInvAlgorithm computes the coefficients with the general pseudoinverse
+// algorithm proposed by
 // [Risteski](http://koreascience.or.kr/article/JAKO201314358624990.page).
-// There are other articles and methods of chemical equation balancing by
-// this author, however, this particular algorithm seems to be the most
-// convenient for matrix calculations. The algorithm can be described in
-// steps:
+// The algorithm can be described in steps:
 //
-//  1. Stack reactant matrix and negative product matrix.
+//  1. Stack the reactant matrix and the negative product matrix: the
+//     balanced coefficients are exactly the solutions of A·x = 0.
 //
-//  2. Calculate MP pseudoinverse of this matrix.
+//  2. Calculate the MP pseudoinverse A⁺ of this matrix.
 //
-//  3. Calculate coefficients by formula:
-//     x = (I – A⁺A)a, where x is the coefficients vector,
-//     I - identity matrix, A⁺ - MP inverse, A - matrix,
-//     a - arbitrary vector (in this case, vector of ones).
+//  3. Calculate the coefficients by the general solution of a homogeneous
+//     system: x = (I – A⁺A)a, where I is the identity matrix and a is an
+//     arbitrary vector (here a vector of ones).
 //
-// Note: this method is more general than Thorne's method, although it has
-// some peculiarities of its own. First of all, the output of this method is
-// a float array, so, to generate an int coefs list, it needs to be converted,
-// which does not always lead to a good result. Secondly, MP pseudoinverse is
-// sensitive to row order in the reaction matrix. The rows should be ordered
-// by atoms appearance in the reaction string.
+// (I – A⁺A) is the orthogonal projector onto the null space of A, so the
+// result is the projection of the vector of ones onto the set of balanced
+// solutions. The consequences:
 //
-// The returned vector still contains the raw (possibly negative) values;
-// rounding, intification and validation happen in [balancer.calculateByMethod].
+//   - nullity 0: the only solution is x = 0, the reaction cannot be balanced;
+//     this is reported as an error instead of returning float noise;
+//   - nullity 1: the projection is a positive multiple of the unique balanced
+//     vector, so the result is already positive if the reaction is feasible as
+//     written (mixed signs mean that some compound is on the wrong side);
+//   - nullity ≥ 2: the result is just one of infinitely many solutions, the
+//     one closest to a vector of ones. Nothing guarantees that it is positive
+//     or free of zeros even when a fully positive solution exists, so the
+//     caller must validate it (and fall back to another search if needed).
+//
+// The result does not depend on the order of the rows (elements) of the
+// reaction matrix: A⁺A is the orthogonal projector onto the row space, and
+// permuting rows does not change that space. Only floating point noise
+// changes.
+//
+// The output is a float array, so to get integer coefficients it has to be
+// converted, which is done (together with validation) by
+// [balancer.calculateByMethod].
 func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 	rows, cols := b.ReactionMatrix.Dims()
 
@@ -253,33 +447,37 @@ func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 		}
 	}
 
-	inverse, err := computePseudoinverse(matrix, b.Tolerance)
+	inverse, rank, err := pseudoinverseWithRank(matrix, b.Tolerance)
 	if err != nil {
 		return nil, err
 	}
-
-	identityMatrix := mat.NewDense(cols, cols, nil)
-	for i := range cols {
-		identityMatrix.Set(i, i, 1.0)
+	if rank == 0 {
+		return nil, fmt.Errorf("the reaction matrix contains no atoms")
+	}
+	if rank == cols {
+		return nil, fmt.Errorf("the reaction cannot be balanced (nullity 0)")
 	}
 
-	a := mat.NewVecDense(cols, nil)
-	for i := range cols {
-		a.SetVec(i, 1.0)
-	}
-
+	// x = (I - A⁺A)·1
 	temp := mat.NewDense(cols, cols, nil)
 	temp.Product(inverse, matrix)
 	temp.Scale(-1, temp)
-	temp.Add(identityMatrix, temp)
+	for i := range cols {
+		temp.Set(i, i, temp.At(i, i)+1)
+	}
 
+	ones := mat.NewVecDense(cols, nil)
+	for i := range cols {
+		ones.SetVec(i, 1)
+	}
 	coefs := mat.NewVecDense(cols, nil)
-	coefs.MulVec(temp, a)
+	coefs.MulVec(temp, ones)
 
 	result := make([]float64, cols)
 	for i := range cols {
 		result[i] = coefs.AtVec(i)
 	}
+	zeroNoise(result, b.Tolerance)
 
 	return result, nil
 }
@@ -306,6 +504,19 @@ func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 // The result is [x, y]: the reactant coefficients followed by the product
 // coefficients.
 //
+// G = 0 is a normal case (it happens whenever every product column lies in
+// the column space of A, e.g. when A has full row rank, as in
+// H₂ + O₂ = H₂O), and then G⁺ = 0 and y = u. The pseudoinverse of a zero
+// matrix is therefore the zero matrix and not an error.
+//
+// The nullity of the whole reaction matrix is
+// (reactants − rank A) + (products − rank G), so it comes for free; nullity 0
+// is reported as an error. As with [balancingAlgos.gPInvAlgorithm], for
+// nullity ≥ 2 the result is only one particular solution and the caller has
+// to validate it. Note that the term (I-A^-A)v is an arbitrary element of the
+// null space of A (reactants that are dependent on each other), so when that
+// space is not trivial the result can have wrong signs.
+//
 // Note: while this algorithm and [balancingAlgos.gPInvAlgorithm] are very
 // similar, there are some differences in output results. This method exists
 // mostly for legacy purposes, like balancing some reactions according to
@@ -313,9 +524,9 @@ func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	reactantRows, reactantCols := b.ReactantMatrix.Dims()
 
-	mpInverse, err := computePseudoinverse(b.ReactantMatrix, b.Tolerance)
+	mpInverse, rankA, err := pseudoinverseWithRank(b.ReactantMatrix, b.Tolerance)
 	if err != nil {
-		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %s", err)
+		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %w", err)
 	}
 
 	identity := mat.NewDense(reactantRows, reactantRows, nil)
@@ -330,9 +541,14 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	var gMatrix mat.Dense
 	gMatrix.Mul(&tempIdentity, b.ProductMatrix)
 
-	gPinv, err := computePseudoinverse(&gMatrix, b.Tolerance)
+	gPinv, rankG, err := pseudoinverseWithRank(mat.DenseCopyOf(&gMatrix), b.Tolerance)
 	if err != nil {
-		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %s", err)
+		return nil, fmt.Errorf("error computing pseudoinverse of the G matrix: %w", err)
+	}
+
+	nullity := (reactantCols - rankA) + (b.ProductCols - rankG)
+	if nullity == 0 {
+		return nil, fmt.Errorf("the reaction cannot be balanced (nullity 0)")
 	}
 
 	var gPinvG mat.Dense
@@ -394,8 +610,65 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	for i := range yMultiplyCols {
 		coefs[reactantCols+i] = yVector.AtVec(i)
 	}
+	zeroNoise(coefs, b.Tolerance)
 
 	return coefs, nil
+}
+
+// computePseudoinverse returns the Moore-Penrose pseudoinverse of matrix as
+// a cols×rows dense matrix. See [pseudoinverseWithRank].
+func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
+	inverse, _, err := pseudoinverseWithRank(matrix, tol)
+	return inverse, err
+}
+
+// pseudoinverseWithRank returns the Moore-Penrose pseudoinverse of matrix as
+// a cols×rows dense matrix together with the rank used to compute it. It is
+// computed from the truncated SVD of the matrix: only the rank singular
+// values above tol are kept (rank is the number of singular values greater
+// than tol), which is the least-squares solution gonum's SolveTo expects.
+//
+// A matrix whose singular values are all below tol (in particular a zero
+// matrix) has rank 0 and the zero matrix as its pseudoinverse; gonum's
+// SolveTo cannot handle rank 0, so that case is returned directly. The
+// function fails only if the factorization fails.
+func pseudoinverseWithRank(matrix *mat.Dense, tol float64) (*mat.Dense, int, error) {
+	rows, cols := matrix.Dims()
+
+	rank, svd, err := matrixRank(matrix, tol)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	inverse := mat.NewDense(cols, rows, nil)
+	if rank < 1 {
+		return inverse, 0, nil
+	}
+
+	b := mat.NewDense(rows, rows, nil)
+	for i := range rows {
+		b.Set(i, i, 1.0)
+	}
+
+	svd.SolveTo(inverse, b, rank)
+
+	return inverse, rank, nil
+}
+
+// zeroNoise sets to zero the entries of v that are negligible compared to the
+// largest one (floating point residue of a projection onto the null space),
+// so that "this compound does not take part" is a clean 0 for the caller.
+func zeroNoise(v []float64, tol float64) {
+	maxAbs := 0.0
+	for _, x := range v {
+		maxAbs = math.Max(maxAbs, math.Abs(x))
+	}
+	eps := tol * math.Max(1, maxAbs)
+	for i, x := range v {
+		if math.Abs(x) <= eps {
+			v[i] = 0
+		}
+	}
 }
 
 // combinatorial finds a solution of a Diophantine matrix equation by simply
@@ -499,36 +772,6 @@ func mulAndSum(matrix *mat.Dense, vector []int, result []float64, rows int, cols
 	}
 }
 
-// computePseudoinverse returns the Moore-Penrose pseudoinverse of matrix as
-// a cols×rows dense matrix. It is computed from the truncated SVD of the
-// matrix: only the rank singular values above tol are kept (rank is the
-// number of singular values greater than tol), which is the least-squares
-// solution gonum's SolveTo expects. It fails if the factorization fails or
-// the matrix has rank 0.
-func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
-	rows, cols := matrix.Dims()
-
-	rank, svd, err := matrixRank(matrix, tol)
-	if err != nil {
-		return nil, err
-	}
-
-	if rank < 1 {
-		return nil, fmt.Errorf("rank %d out of range", rank)
-	}
-
-	b := mat.NewDense(rows, rows, nil)
-	for i := range rows {
-		b.Set(i, i, 1.0)
-	}
-
-	inverse := mat.NewDense(cols, rows, nil)
-
-	svd.SolveTo(inverse, b, rank)
-
-	return inverse, nil
-}
-
 // matrixRank returns the rank of m — the number of singular values greater
 // than tol — together with the SVD factorization, so callers that also need
 // the decomposition can reuse it instead of factoring twice. An error is
@@ -550,27 +793,4 @@ func matrixRank(m *mat.Dense, tol float64) (int, mat.SVD, error) {
 	}
 
 	return rank, svd, nil
-}
-
-// findNonZeroRows returns the indices of the rows of m that contain at least
-// one element with an absolute value greater than tol. It drops the all-zero
-// rows the [balancingAlgos.invAlgorithm] augmentation may produce.
-func findNonZeroRows(m *mat.Dense, tol float64) []int {
-	rows, cols := m.Dims()
-	nonZeroRows := []int{}
-
-	for i := range rows {
-		isZeroRow := true
-		for j := range cols {
-			if math.Abs(m.At(i, j)) > tol {
-				isZeroRow = false
-				break
-			}
-		}
-		if !isZeroRow {
-			nonZeroRows = append(nonZeroRows, i)
-		}
-	}
-
-	return nonZeroRows
 }
