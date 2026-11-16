@@ -99,3 +99,8 @@ tasks:
     desc: "Run Go linter on the codebase"
     cmds:
       - golangci-lint run -E gocritic
+
+  loc:
+    desc: "Run cloc program to display current lines of code. cloc should be in PATH"
+    cmds:
+      - cloc .
