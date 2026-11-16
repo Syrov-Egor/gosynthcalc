@@ -62,7 +62,7 @@ func (c *coeffs) validateCoeffs(coefs []float64) error {
 	_, cols := c.balancer.reactionMatrix.Dims()
 
 	switch {
-	case !allPositive(coefs):
+	case !utils.AllPositive(coefs):
 		return fmt.Errorf("some coefs in %v are negative or 0", coefs)
 	case len(coefs) != cols:
 		return fmt.Errorf("number of coefs should be equal %d, got %d", cols, len(coefs))

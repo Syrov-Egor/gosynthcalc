@@ -97,7 +97,8 @@ func newBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 //
 // Steps:
 //
-//  1. The rank r is the number of singular values above the tolerance.
+//  1. The rank r and the nullity n-r are supplied by the balancer, which
+//     determines them once from the singular values of A.
 //  2. A Gaussian elimination with partial pivoting, left to right, tracks
 //     which ORIGINAL rows end up as pivot rows (they are independent, which
 //     drops dependent rows such as a charge row that is a combination of the
@@ -123,28 +124,17 @@ func newBalancingAlgos(reactionMatrix *mat.Dense, separatorPos int, tolerance ..
 // backward-stable but not exact. If that fails the check as well, an error is
 // returned: a wrong null space is never returned silently.
 //
-// The returned nullity is n-r. The basis is nil when the nullity is zero.
-func (b *balancingAlgos) nullSpaceByInversion() (basis *mat.Dense, nullity int, err error) {
+// The rank and nullity of the reaction matrix are supplied by the caller
+// (see [balancer.reactionRankAndNullity]) so that they are not computed more
+// than once. The basis is nil when the nullity is zero.
+func (b *balancingAlgos) nullSpaceByInversion(rank, nullity int) (basis *mat.Dense, err error) {
 	m, n := b.ReactionMatrix.Dims()
 	if n == 0 || m == 0 {
-		return nil, 0, fmt.Errorf("empty reaction matrix")
+		return nil, fmt.Errorf("empty reaction matrix")
 	}
 
-	var svd mat.SVD
-	if !svd.Factorize(b.ReactionMatrix, mat.SVDThin) {
-		return nil, 0, fmt.Errorf("SVD factorization failed")
-	}
-	sv := svd.Values(nil)
-	rank := 0
-	for _, s := range sv {
-		if s > b.Tolerance*math.Max(1, sv[0]) {
-			rank++
-		}
-	}
-
-	nullity = n - rank
 	if nullity == 0 {
-		return nil, 0, nil
+		return nil, nil
 	}
 	if rank == 0 {
 		// The zero matrix: every unit vector is a null vector.
@@ -152,7 +142,7 @@ func (b *balancingAlgos) nullSpaceByInversion() (basis *mat.Dense, nullity int, 
 		for i := range n {
 			basis.Set(i, i, 1)
 		}
-		return basis, n, nil
+		return basis, nil
 	}
 
 	// 1. Exact route: independent ORIGINAL rows.
@@ -170,13 +160,17 @@ func (b *balancingAlgos) nullSpaceByInversion() (basis *mat.Dense, nullity int, 
 			exactErr = fmt.Errorf("inaccurate null space")
 		}
 		if exactErr == nil {
-			return basis, nullity, nil
+			return basis, nil
 		}
 	} else if exactErr == nil {
 		exactErr = fmt.Errorf("rank/pivot mismatch: expected %d free columns, found %d", nullity, len(free))
 	}
 
 	// 2. Fallback: orthonormal basis of the row space (first rank rows of Vᵀ).
+	var svd mat.SVD
+	if !svd.Factorize(b.ReactionMatrix, mat.SVDThin) {
+		return nil, fmt.Errorf("SVD factorization failed: %w", exactErr)
+	}
 	var v mat.Dense
 	svd.VTo(&v)
 	rowSpace := mat.NewDense(rank, n, nil)
@@ -189,11 +183,11 @@ func (b *balancingAlgos) nullSpaceByInversion() (basis *mat.Dense, nullity int, 
 	if err == nil && len(free) == nullity {
 		basis, err = augmentedInverseBasis(rowSpace, free)
 		if err == nil && b.nullBasisIsAccurate(basis) {
-			return basis, nullity, nil
+			return basis, nil
 		}
 	}
 
-	return nil, 0, fmt.Errorf("could not compute an accurate null space (the reaction matrix is numerically ill-conditioned): %w", exactErr)
+	return nil, fmt.Errorf("could not compute an accurate null space (the reaction matrix is numerically ill-conditioned): %w", exactErr)
 }
 
 // augmentedInverseBasis stacks rows (rank×n) on top of the unit rows of the
@@ -345,21 +339,25 @@ func pivotRowsAndFreeColumns(a *mat.Dense, rank int, tol float64) (pivotRows, fr
 // The reaction matrix is assumed to hold plain (non-negative) atom counts for
 // both sides, as in the article, so a balanced vector has opposite signs on
 // the two sides.
-func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
+//
+// rank and nullity are supplied by the balancer; they are not recomputed
+// here.
+func (b *balancingAlgos) invAlgorithm(rank, nullity int) ([]float64, error) {
 	_, cols := b.ReactionMatrix.Dims()
 	if b.SeparatorPos <= 0 || b.SeparatorPos >= cols {
 		return nil, fmt.Errorf("reaction needs at least one reactant and one product")
 	}
 
-	basis, nullity, err := b.nullSpaceByInversion()
-	if err != nil {
-		return nil, err
-	}
 	switch {
 	case nullity == 0:
 		return nil, fmt.Errorf("the reaction cannot be balanced (nullity 0)")
 	case nullity > 1:
 		return nil, fmt.Errorf("the reaction has nullity %d: it has infinitely many independent balanced equations, not a single one", nullity)
+	}
+
+	basis, err := b.nullSpaceByInversion(rank, nullity)
+	if err != nil {
+		return nil, err
 	}
 
 	x := mat.Col(nil, 0, basis)
@@ -435,7 +433,10 @@ func (b *balancingAlgos) invAlgorithm() ([]float64, error) {
 // The output is a float array, so to get integer coefficients it has to be
 // converted, which is done (together with validation) by
 // [balancer.calculateByMethod].
-func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
+//
+// rank and nullity are supplied by the balancer; they are not recomputed
+// here.
+func (b *balancingAlgos) gPInvAlgorithm(rank, nullity int) ([]float64, error) {
 	rows, cols := b.ReactionMatrix.Dims()
 
 	matrix := mat.NewDense(rows, cols, nil)
@@ -447,15 +448,16 @@ func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 		}
 	}
 
-	inverse, rank, err := pseudoinverseWithRank(matrix, b.Tolerance)
-	if err != nil {
-		return nil, err
-	}
 	if rank == 0 {
 		return nil, fmt.Errorf("the reaction matrix contains no atoms")
 	}
-	if rank == cols {
+	if nullity == 0 {
 		return nil, fmt.Errorf("the reaction cannot be balanced (nullity 0)")
+	}
+
+	inverse, err := pseudoinverseWithRank(matrix, rank)
+	if err != nil {
+		return nil, err
 	}
 
 	// x = (I - A⁺A)·1
@@ -517,14 +519,22 @@ func (b *balancingAlgos) gPInvAlgorithm() ([]float64, error) {
 // null space of A (reactants that are dependent on each other), so when that
 // space is not trivial the result can have wrong signs.
 //
+// rank, nullity and reactantRank are supplied by the balancer. Since
+// rank G = rank − rank A, the rank of the intermediate G matrix is derived
+// from them instead of being computed again with an SVD.
+//
 // Note: while this algorithm and [balancingAlgos.gPInvAlgorithm] are very
 // similar, there are some differences in output results. This method exists
 // mostly for legacy purposes, like balancing some reactions according to
 // Risteski.
-func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
+func (b *balancingAlgos) pPInvAlgorithm(rank, nullity, reactantRank int) ([]float64, error) {
 	reactantRows, reactantCols := b.ReactantMatrix.Dims()
 
-	mpInverse, rankA, err := pseudoinverseWithRank(b.ReactantMatrix, b.Tolerance)
+	if nullity == 0 {
+		return nil, fmt.Errorf("the reaction cannot be balanced (nullity 0)")
+	}
+
+	mpInverse, err := pseudoinverseWithRank(b.ReactantMatrix, reactantRank)
 	if err != nil {
 		return nil, fmt.Errorf("error computing pseudoinverse of reactant matrix: %w", err)
 	}
@@ -541,14 +551,13 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	var gMatrix mat.Dense
 	gMatrix.Mul(&tempIdentity, b.ProductMatrix)
 
-	gPinv, rankG, err := pseudoinverseWithRank(mat.DenseCopyOf(&gMatrix), b.Tolerance)
+	gRank := rank - reactantRank
+	if gRank < 0 || gRank > min(reactantRows, b.ProductCols) {
+		return nil, fmt.Errorf("invalid rank of the G matrix: %d", gRank)
+	}
+	gPinv, err := pseudoinverseWithRank(mat.DenseCopyOf(&gMatrix), gRank)
 	if err != nil {
 		return nil, fmt.Errorf("error computing pseudoinverse of the G matrix: %w", err)
-	}
-
-	nullity := (reactantCols - rankA) + (b.ProductCols - rankG)
-	if nullity == 0 {
-		return nil, fmt.Errorf("the reaction cannot be balanced (nullity 0)")
 	}
 
 	var gPinvG mat.Dense
@@ -615,34 +624,27 @@ func (b *balancingAlgos) pPInvAlgorithm() ([]float64, error) {
 	return coefs, nil
 }
 
-// computePseudoinverse returns the Moore-Penrose pseudoinverse of matrix as
-// a cols×rows dense matrix. See [pseudoinverseWithRank].
-func computePseudoinverse(matrix *mat.Dense, tol float64) (*mat.Dense, error) {
-	inverse, _, err := pseudoinverseWithRank(matrix, tol)
-	return inverse, err
-}
-
 // pseudoinverseWithRank returns the Moore-Penrose pseudoinverse of matrix as
-// a cols×rows dense matrix together with the rank used to compute it. It is
-// computed from the truncated SVD of the matrix: only the rank singular
-// values above tol are kept (rank is the number of singular values greater
-// than tol), which is the least-squares solution gonum's SolveTo expects.
+// a cols×rows dense matrix using the supplied rank. The rank is determined by
+// the balancer and is not recomputed here.
 //
-// A matrix whose singular values are all below tol (in particular a zero
-// matrix) has rank 0 and the zero matrix as its pseudoinverse; gonum's
-// SolveTo cannot handle rank 0, so that case is returned directly. The
-// function fails only if the factorization fails.
-func pseudoinverseWithRank(matrix *mat.Dense, tol float64) (*mat.Dense, int, error) {
+// It is computed from the truncated SVD of the matrix: only the first rank
+// singular values are kept, which is the least-squares solution gonum's
+// SolveTo expects. A zero rank (in particular for a zero matrix) gives the
+// zero matrix as its pseudoinverse; gonum's SolveTo cannot handle rank 0, so
+// that case is returned directly. The function fails only if the
+// factorization fails.
+func pseudoinverseWithRank(matrix *mat.Dense, rank int) (*mat.Dense, error) {
 	rows, cols := matrix.Dims()
-
-	rank, svd, err := matrixRank(matrix, tol)
-	if err != nil {
-		return nil, 0, err
-	}
 
 	inverse := mat.NewDense(cols, rows, nil)
 	if rank < 1 {
-		return inverse, 0, nil
+		return inverse, nil
+	}
+
+	var svd mat.SVD
+	if !svd.Factorize(matrix, mat.SVDFull) {
+		return nil, fmt.Errorf("SVD factorization failed")
 	}
 
 	b := mat.NewDense(rows, rows, nil)
@@ -652,7 +654,7 @@ func pseudoinverseWithRank(matrix *mat.Dense, tol float64) (*mat.Dense, int, err
 
 	svd.SolveTo(inverse, b, rank)
 
-	return inverse, rank, nil
+	return inverse, nil
 }
 
 // zeroNoise sets to zero the entries of v that are negligible compared to the

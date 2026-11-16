@@ -45,6 +45,25 @@ func SumFloatS(s []float64) float64 {
 	return sum
 }
 
+// SumAbs returns the sum of the absolute values of coefs.
+func SumAbs(coefs []float64) float64 {
+	var sum float64
+	for _, coef := range coefs {
+		sum += math.Abs(coef)
+	}
+	return sum
+}
+
+// AllPositive reports whether every coefficient is strictly greater than 0.
+func AllPositive(coefs []float64) bool {
+	for _, coef := range coefs {
+		if coef <= 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // pow10 caches the powers of ten for precisions 0-22 so that rounding does
 // not have to call math.Pow in the common cases.
 var pow10 = [23]float64{
